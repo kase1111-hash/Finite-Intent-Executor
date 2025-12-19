@@ -1,8 +1,188 @@
-Finite Intent Executor (FIE) Specification – Revised v1.1
-Overview
+# Finite Intent Executor (FIE)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Solidity](https://img.shields.io/badge/Solidity-0.8.20-blue.svg)](https://soliditylang.org/)
+
+> Blockchain-based posthumous intent execution with strict temporal bounds and safeguards
+
+## Overview
+
 The Finite Intent Executor (FIE) is a modular, blockchain-based system for capturing and executing an individual's predefined intent posthumously, with strict bounds on duration, scope, and agency. It provides high-fidelity continuity of values, projects, and assets for exactly 20 years after trigger, then automatically sunsets into a non-executable public archive. The design prioritizes verifiability, auditability, and resistance to drift, capture, or expansion while remaining fully revocable during the creator's lifetime.
-Core principle:
-FIE allows human intent to execute faithfully beyond life, without allowing power to outlive relevance.
+
+### Core Principle
+
+**FIE allows human intent to execute faithfully beyond life, without allowing power to outlive relevance.**
+
+## Quick Start
+
+```bash
+# Install dependencies
+npm install
+
+# Compile contracts
+npm run compile
+
+# Run tests
+npm test
+
+# Deploy to local network
+npm run node          # Terminal 1
+npm run deploy        # Terminal 2
+```
+
+## Features
+
+- **Immutable Intent Capture**: Cryptographically secure storage of goals, assets, and contextual corpus
+- **Multiple Trigger Types**: Deadman switch, trusted quorum, or oracle-verified triggers
+- **Scope-Bounded Execution**: AI executor with strict constraints and 95% confidence threshold
+- **IP Tokenization**: ERC721 tokens for intellectual property with licensing and royalties
+- **Mandatory Sunset**: Automatic termination after exactly 20 years
+- **Public Domain Transition**: All assets move to CC0 or equivalent after sunset
+- **Semantic Clustering**: Post-sunset grouping for cultural discoverability
+- **No Political Agency**: Hard-coded prohibition on political activities
+- **Full Auditability**: All decisions logged on-chain with corpus citations
+
+## Documentation
+
+- **[USAGE.md](USAGE.md)**: Complete usage guide with examples
+- **[ARCHITECTURE.md](ARCHITECTURE.md)**: Technical architecture and design details
+- **[Specification](#specification-v11)**: Original specification (below)
+
+## Smart Contracts
+
+| Contract | Purpose | Key Features |
+|----------|---------|--------------|
+| **IntentCaptureModule** | Captures and stores intent | Immutable storage, multi-version signing, revocability |
+| **TriggerMechanism** | Manages trigger conditions | Deadman switch, quorum, oracle verification |
+| **ExecutionAgent** | Executes posthumous intent | Scope-bounded, 95% confidence, political filter |
+| **LexiconHolder** | Semantic indexing | Non-actuating, corpus resolution, clustering |
+| **SunsetProtocol** | 20-year termination | Asset archival, public domain transition |
+| **IPToken** | IP tokenization | ERC721, licensing, royalties, public domain |
+
+## Architecture
+
+```
+Intent Capture → Trigger → Execution Agent → Sunset Protocol
+                    ↓            ↓                ↓
+              Lexicon Holder  IP Tokens    Public Archive
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed system design.
+
+## Installation
+
+### Prerequisites
+
+- Node.js v16+ and npm
+- Hardhat development environment
+
+### Setup
+
+```bash
+git clone https://github.com/your-username/Finite-Intent-Executor.git
+cd Finite-Intent-Executor
+npm install
+```
+
+### Compile
+
+```bash
+npm run compile
+```
+
+### Test
+
+```bash
+npm test
+```
+
+### Deploy
+
+```bash
+# Local deployment
+npx hardhat node                          # Terminal 1
+npx hardhat run scripts/deploy.js         # Terminal 2
+
+# Network deployment
+npx hardhat run scripts/deploy.js --network <network-name>
+```
+
+Deployment addresses are saved to `deployment-addresses.json`.
+
+## Usage Example
+
+```javascript
+// 1. Capture intent
+await intentModule.captureIntent(
+  intentHash,
+  corpusHash,
+  "ipfs://corpus-uri",
+  "ipfs://assets-uri",
+  2020,
+  2028,
+  [assetAddress1, assetAddress2]
+);
+
+// 2. Configure trigger
+await triggerMechanism.configureDeadmanSwitch(90 * 24 * 60 * 60); // 90 days
+
+// 3. Mint IP tokens
+await ipToken.mintIP(
+  creatorAddress,
+  "My Life's Work",
+  "Important research",
+  "article",
+  contentHash,
+  "ipfs://metadata-uri",
+  "CC-BY-4.0"
+);
+
+// 4. After trigger, execution begins
+// 5. After 20 years, automatic sunset to public domain
+```
+
+See [USAGE.md](USAGE.md) for comprehensive examples.
+
+## Security
+
+### Threat Mitigation
+
+| Threat | Mitigation |
+|--------|------------|
+| Oracle failure | Conservative halt (default to inaction) |
+| LLM misalignment | Hard scope-bounded APIs, 95% confidence |
+| Chain failure | Multi-chain deployment capability |
+| Corpus poisoning | Immutable cryptographic hashes |
+| Key compromise | Revocation while alive |
+| Political capture | No Political Agency Clause |
+| Indefinite execution | Hard-coded 20-year sunset |
+
+### Auditing
+
+All decisions are logged on-chain with:
+- Action taken
+- Corpus citation
+- Confidence score
+- Timestamp
+- Decision hash
+
+## Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Write tests for new functionality
+4. Ensure all tests pass
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+# Specification v1.1
 Components
 
 Intent Capture Module
