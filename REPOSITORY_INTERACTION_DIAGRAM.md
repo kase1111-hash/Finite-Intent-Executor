@@ -1,7 +1,14 @@
 # Finite Intent Executor - System Interaction Diagram
 
 ## Overview
+
 The Finite Intent Executor consists of 6 core smart contracts that work together to capture, trigger, execute, and sunset posthumous intent.
+
+**Related Documentation**:
+- [README.md](README.md) - Project overview and quick start
+- [SPECIFICATION.md](SPECIFICATION.md) - Core specification and principles
+- [ARCHITECTURE.md](ARCHITECTURE.md) - Detailed component architecture
+- [USAGE.md](USAGE.md) - Practical usage guide
 
 ## System Architecture Diagram
 
@@ -322,3 +329,10 @@ The Finite Intent Executor is a **6-contract system** designed for posthumous in
 6. **IPToken**: ERC721 IP asset management
 
 All contracts work together to ensure **"Human intent executes faithfully beyond life, without allowing power to outlive relevance."**
+
+---
+
+**Next Steps**:
+- For detailed component design, see [ARCHITECTURE.md](ARCHITECTURE.md)
+- For usage instructions, see [USAGE.md](USAGE.md)
+- For core principles, see [SPECIFICATION.md](SPECIFICATION.md)

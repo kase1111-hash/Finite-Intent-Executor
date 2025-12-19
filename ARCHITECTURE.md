@@ -1,8 +1,15 @@
 # Finite Intent Executor - Architecture Documentation
 
-## System Architecture
+## Overview
 
 The Finite Intent Executor (FIE) is a modular blockchain system consisting of six core smart contracts that work together to enable posthumous intent execution with strict temporal bounds and safeguards.
+
+**Related Documentation**:
+- [SPECIFICATION.md](SPECIFICATION.md) - Core specification and principles
+- [REPOSITORY_INTERACTION_DIAGRAM.md](REPOSITORY_INTERACTION_DIAGRAM.md) - System interaction flows
+- [USAGE.md](USAGE.md) - Practical usage guide
+
+## System Architecture
 
 ## Contract Overview
 
@@ -609,3 +616,7 @@ TrustedSignatureReceived(creator, signer)
 - 95% confidence threshold maintained
 - Inaction default mode preserved
 - Corpus immutability protected
+
+---
+
+For implementation examples and usage instructions, see [USAGE.md](USAGE.md).
