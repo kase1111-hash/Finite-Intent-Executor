@@ -44,9 +44,10 @@ npm run deploy        # Terminal 2
 
 ## Documentation
 
-- **[USAGE.md](USAGE.md)**: Complete usage guide with examples
+- **[SPECIFICATION.md](SPECIFICATION.md)**: Original specification v1.1
 - **[ARCHITECTURE.md](ARCHITECTURE.md)**: Technical architecture and design details
-- **[Specification](#specification-v11)**: Original specification (below)
+- **[REPOSITORY_INTERACTION_DIAGRAM.md](REPOSITORY_INTERACTION_DIAGRAM.md)**: System interaction diagrams
+- **[USAGE.md](USAGE.md)**: Complete usage guide with examples
 
 ## Smart Contracts
 
@@ -67,104 +68,30 @@ Intent Capture → Trigger → Execution Agent → Sunset Protocol
               Lexicon Holder  IP Tokens    Public Archive
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed system design.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed component design and [REPOSITORY_INTERACTION_DIAGRAM.md](REPOSITORY_INTERACTION_DIAGRAM.md) for system interaction flows.
 
-## Installation
+## Usage
 
-### Prerequisites
-
-- Node.js v16+ and npm
-- Hardhat development environment
-
-### Setup
-
-```bash
-git clone https://github.com/your-username/Finite-Intent-Executor.git
-cd Finite-Intent-Executor
-npm install
-```
-
-### Compile
-
-```bash
-npm run compile
-```
-
-### Test
-
-```bash
-npm test
-```
-
-### Deploy
-
-```bash
-# Local deployment
-npx hardhat node                          # Terminal 1
-npx hardhat run scripts/deploy.js         # Terminal 2
-
-# Network deployment
-npx hardhat run scripts/deploy.js --network <network-name>
-```
-
-Deployment addresses are saved to `deployment-addresses.json`.
-
-## Usage Example
-
-```javascript
-// 1. Capture intent
-await intentModule.captureIntent(
-  intentHash,
-  corpusHash,
-  "ipfs://corpus-uri",
-  "ipfs://assets-uri",
-  2020,
-  2028,
-  [assetAddress1, assetAddress2]
-);
-
-// 2. Configure trigger
-await triggerMechanism.configureDeadmanSwitch(90 * 24 * 60 * 60); // 90 days
-
-// 3. Mint IP tokens
-await ipToken.mintIP(
-  creatorAddress,
-  "My Life's Work",
-  "Important research",
-  "article",
-  contentHash,
-  "ipfs://metadata-uri",
-  "CC-BY-4.0"
-);
-
-// 4. After trigger, execution begins
-// 5. After 20 years, automatic sunset to public domain
-```
-
-See [USAGE.md](USAGE.md) for comprehensive examples.
+See [USAGE.md](USAGE.md) for comprehensive usage guide including:
+- Installation and deployment
+- Intent capture and goal definition
+- Trigger configuration (deadman, quorum, oracle)
+- IP tokenization and licensing
+- Execution workflows
+- Sunset process
 
 ## Security
 
-### Threat Mitigation
+**Key Features**:
+- 95% confidence threshold for all actions
+- Default to inaction if ambiguity cannot be resolved
+- No Political Agency Clause (hard-coded prohibition)
+- Immutable cryptographic corpus hashes
+- On-chain logging of all decisions with citations
+- Revocability while creator is alive
+- Hard-coded 20-year sunset
 
-| Threat | Mitigation |
-|--------|------------|
-| Oracle failure | Conservative halt (default to inaction) |
-| LLM misalignment | Hard scope-bounded APIs, 95% confidence |
-| Chain failure | Multi-chain deployment capability |
-| Corpus poisoning | Immutable cryptographic hashes |
-| Key compromise | Revocation while alive |
-| Political capture | No Political Agency Clause |
-| Indefinite execution | Hard-coded 20-year sunset |
-
-### Auditing
-
-All decisions are logged on-chain with:
-- Action taken
-- Corpus citation
-- Confidence score
-- Timestamp
-- Decision hash
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed threat mitigation and access control.
 
 ## Contributing
 
@@ -179,61 +106,3 @@ Contributions are welcome! Please:
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-# Specification v1.1
-Components
-
-Intent Capture Module
-Captures assets (tokenized IP, funds, keys, rights), goals, constraints, and a time-boxed contextual corpus (5–10 year window centered on capture date).
-Output: Immutable intent graph stored on-chain with cryptographic commitments.
-LLM-assisted parsing for clarity; creator signs all versions.
-
-Trigger Mechanism
-Deadman switch, trusted-signature quorum, or verified oracles (e.g., medical/legal events via zero-knowledge proofs).
-Atomic, irreversible transfer of control upon valid trigger.
-
-Execution Agent
-Narrow, scope-bounded AI executor.
-Capabilities: License assets, collect and distribute revenue, fund aligned projects, enforce constraints via smart contracts.
-Interpretation: All ambiguous terms resolved exclusively via retrieval-augmented generation against the frozen contextual corpus.
-Ambiguity Resolution Failure Mode: If intent cannot be resolved with ≥95% confidence through corpus citation, the Execution Agent MUST permanently default to inaction for the affected operation or branch. No speculative or creative interpretation permitted.
-No Political Agency Clause: The FIE MAY NOT engage in electoral activity, political advocacy, lobbying, or policy influence beyond passive licensing of the creator’s authored works.
-All decisions logged on-chain with corpus citations.
-
-Lexicon Holders
-Definition: Lexicon holders are non-actuating semantic indexers. They possess no authority to initiate, modify, veto, or otherwise influence execution. Their sole functions are (a) providing interpretive citations from the frozen corpus during active execution and (b) post-sunset clustering of archived legacies.
-Operated via decentralized protocols or neutral LLM instances; no centralized control.
-
-Sunset Protocol
-Mandatory termination exactly 20 years after trigger date (fixed, non-configurable).
-Halts all execution.
-Migrates all assets and IP to permanent decentralized storage.
-Post-Sunset Asset State: All IP assets SHALL transition to public-domain-equivalent licensing (CC0 or equivalent) or a neutral stewardship license that prohibits exclusive re-enclosure.
-Automated clustering: Embeddings group the legacy with semantically similar archived intents for discoverability and cultural remix.
-Fully automated via lexicon holders; no human curation.
-
-
-Features & Safeguards
-
-Drift Resistance: Interpretation locked to time-boxed corpus.
-Transparency & Auditability: All triggers, decisions, logs, and sunsets on-chain.
-Revocability: Complete while alive via private key.
-Self-Funding: Endowed treasuries cover operational costs.
-Fork Neutrality: Post-sunset forks or adaptations by third parties are unmanaged and outside FIE scope.
-
-Threat Model (Minimal)
-
-Oracle failure → conservative halt (default to inaction).
-LLM misalignment → hard scope-bounded APIs and confidence thresholds.
-Chain failure → multi-chain escrow with automated fallback.
-Corpus poisoning → immutable cryptographic snapshot hashes.
-Key compromise while alive → immediate revocation and reissue.
-
-Implementation Notes
-
-Compatible with mature blockchain ecosystems supporting tokenization, smart contracts, and decentralized storage.
-Core design remains deliberately simple to enable formal verification and broad adoption.
-
-This revised specification turns the problem of posthumous intent from an intractable trust problem into a solvable systems problem—delivering finite, inspectable, enforceable continuity without creating unkillable power structures.

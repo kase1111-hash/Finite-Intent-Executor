@@ -2,6 +2,12 @@
 
 This guide explains how to use the Finite Intent Executor (FIE) system to capture and execute posthumous intent.
 
+**Related Documentation**:
+- [README.md](README.md) - Project overview and quick start
+- [SPECIFICATION.md](SPECIFICATION.md) - Core specification and principles
+- [ARCHITECTURE.md](ARCHITECTURE.md) - Technical architecture details
+- [REPOSITORY_INTERACTION_DIAGRAM.md](REPOSITORY_INTERACTION_DIAGRAM.md) - System interaction flows
+
 ## Table of Contents
 
 1. [Installation](#installation)
@@ -420,6 +426,13 @@ await intentModule.captureIntent(
 ## Support
 
 For issues and questions:
-- GitHub Issues: [Report bugs or request features]
-- Documentation: See full specification in README.md
-- Tests: Run `npm test` to see example usage
+- **GitHub Issues**: Report bugs or request features
+- **Documentation**:
+  - [SPECIFICATION.md](SPECIFICATION.md) - Core specification
+  - [ARCHITECTURE.md](ARCHITECTURE.md) - Technical details
+  - [REPOSITORY_INTERACTION_DIAGRAM.md](REPOSITORY_INTERACTION_DIAGRAM.md) - System flows
+- **Tests**: Run `npm test` to see example usage
+
+---
+
+For architectural details and system design, see [ARCHITECTURE.md](ARCHITECTURE.md).
