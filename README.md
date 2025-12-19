@@ -41,13 +41,36 @@ npm run deploy        # Terminal 2
 - **Semantic Clustering**: Post-sunset grouping for cultural discoverability
 - **No Political Agency**: Hard-coded prohibition on political activities
 - **Full Auditability**: All decisions logged on-chain with corpus citations
+- **License Suggester** *(Optional)*: AI-powered tool to suggest appropriate licenses before tokenizing IP
+
+## Optional Tools
+
+### License Suggester
+
+An **optional helper tool** that uses local AI (Ollama) to suggest appropriate licenses for your intellectual property before minting it as an ERC721 token on the blockchain.
+
+```bash
+# Quick start (requires Ollama + Python)
+ollama pull llama3.2
+pip install -r requirements.txt
+npm run suggest-license -- path/to/your/file.txt
+```
+
+**Features**:
+- Analyzes code, text, art, music, and other IP
+- Suggests licenses compatible with blockchain and 20-year sunset
+- Completely private (runs locally)
+- Optional - provides suggestions only, not legal advice
+
+See **[LICENSE_SUGGESTER.md](LICENSE_SUGGESTER.md)** for detailed setup and usage.
 
 ## Documentation
 
 - **[SPECIFICATION.md](SPECIFICATION.md)**: Original specification v1.1
 - **[ARCHITECTURE.md](ARCHITECTURE.md)**: Technical architecture and design details
+- **[LICENSE_SUGGESTER.md](LICENSE_SUGGESTER.md)**: Optional license suggestion tool guide
 - **[REPOSITORY_INTERACTION_DIAGRAM.md](REPOSITORY_INTERACTION_DIAGRAM.md)**: System interaction diagrams
-- **[USAGE.md](USAGE.md)**: Complete usage guide with examples
+- **[Specification](#specification-v11)**: Original specification (below)
 
 ## Smart Contracts
 
