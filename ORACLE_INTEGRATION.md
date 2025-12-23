@@ -7,26 +7,27 @@ The Oracle Integration module provides secure, verifiable external data feeds fo
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      TriggerMechanism                           │
-│  ┌──────────────┬──────────────┬──────────────┐                │
-│  │ DeadmanSwitch│TrustedQuorum │OracleVerified│                │
-│  └──────────────┴──────────────┴──────┬───────┘                │
-│                                       │                         │
-│                          ┌────────────▼────────────┐           │
-│                          │    OracleRegistry       │           │
-│                          │  - Multi-oracle consensus│          │
-│                          │  - Reputation tracking   │          │
-│                          │  - Aggregation           │          │
-│                          └────────────┬────────────┘           │
-│                                       │                         │
-│              ┌────────────────────────┼────────────────────────┐
-│              │                        │                        │
-│     ┌────────▼────────┐    ┌─────────▼─────────┐    ┌────────▼────────┐
-│     │ ChainlinkAdapter │    │   UMAAdapter      │    │   ZKVerifier    │
-│     │  (Implemented)   │    │  (Implemented)    │    │   (Future)      │
-│     └─────────────────┘    └───────────────────┘    └─────────────────┘
-└─────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────┐
+│                            TriggerMechanism                               │
+│  ┌──────────────┬──────────────┬──────────────┐                          │
+│  │ DeadmanSwitch│TrustedQuorum │OracleVerified│                          │
+│  └──────────────┴──────────────┴──────┬───────┘                          │
+│                                       │                                   │
+│          ┌─────────────────┬──────────┴──────────┬─────────────────┐     │
+│          │                 │                     │                 │     │
+│  ┌───────▼───────┐ ┌───────▼───────┐ ┌──────────▼──────────┐      │     │
+│  │ OracleRegistry │ │  ZKVerifier   │ │ Direct Oracle Mode │      │     │
+│  │  (Registry)    │ │   Adapter     │ │     (Legacy)       │      │     │
+│  └───────┬───────┘ └───────┬───────┘ └────────────────────┘      │     │
+│          │                 │                                       │     │
+│    ┌─────┴─────────────────┼───────────────────────┐              │     │
+│    │                       │                       │              │     │
+│  ┌─▼────────────┐ ┌────────▼────────┐ ┌───────────▼───────────┐  │     │
+│  │ Chainlink    │ │   UMAAdapter    │ │ TrustedIssuerRegistry │  │     │
+│  │ Adapter      │ │                 │ │                       │  │     │
+│  │(Implemented) │ │  (Implemented)  │ │     (Implemented)     │  │     │
+│  └──────────────┘ └─────────────────┘ └───────────────────────┘  │     │
+└───────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Contracts
@@ -279,6 +280,210 @@ const isValid = await registry.isAggregationValid(aggregationId);
 
 ---
 
+### IZKVerifier (Interface)
+
+**Location:** `contracts/oracles/IZKVerifier.sol`
+
+Interface for zero-knowledge proof verifiers supporting multiple proof systems.
+
+**Supported Proof Systems:**
+
+```solidity
+enum ProofSystem {
+    Groth16,    // Most efficient, requires trusted setup per circuit
+    PLONK,      // Universal setup, good balance of size/speed
+    STARK       // No trusted setup, quantum resistant, larger proofs
+}
+```
+
+**Key Functions:**
+
+| Function | Description |
+|----------|-------------|
+| `registerVerificationKey()` | Register a new verification key for a circuit |
+| `verifyProof()` | Verify a ZK proof against a verification key |
+| `isKeyActive()` | Check if a verification key is active |
+| `getVerificationKey()` | Get verification key details |
+| `estimateVerificationGas()` | Estimate gas cost for verification |
+
+---
+
+### TrustedIssuerRegistry
+
+**Location:** `contracts/oracles/TrustedIssuerRegistry.sol`
+
+Registry of trusted certificate authorities for ZK verification.
+
+**Issuer Categories:**
+
+```solidity
+enum IssuerCategory {
+    Government,     // Government agencies (death certificates, IDs)
+    Medical,        // Medical institutions (incapacitation certs)
+    Legal,          // Courts and legal entities (probate, rulings)
+    Financial,      // Financial institutions
+    Custom          // Other trusted entities
+}
+```
+
+**Pre-registered Certificate Types:**
+
+| Type ID | Name | Required Category | Validity |
+|---------|------|-------------------|----------|
+| `DEATH_CERTIFICATE` | Death Certificate | Government | Permanent |
+| `MEDICAL_INCAPACITATION` | Medical Incapacitation | Medical | 1 year |
+| `PROBATE_ORDER` | Probate Court Order | Legal | Permanent |
+| `COURT_RULING` | Court Ruling | Legal | Permanent |
+
+**Key Functions:**
+
+| Function | Description |
+|----------|-------------|
+| `registerIssuer()` | Register a new trusted issuer |
+| `isIssuerTrusted()` | Check if an issuer is currently trusted |
+| `canIssuerIssueCertType()` | Check if issuer can issue a certificate type |
+| `verifyIssuerSignature()` | Verify a signature is from a trusted issuer |
+| `getActiveIssuersForCertType()` | Get all active issuers for a certificate type |
+
+**Usage:**
+
+```javascript
+// Deploy TrustedIssuerRegistry
+const registry = await TrustedIssuerRegistry.deploy();
+
+// Register a government issuer
+const issuerId = ethers.keccak256(ethers.toUtf8Bytes("US-SSA"));
+const publicKeyHash = ethers.keccak256(publicKey);
+await registry.registerIssuer(
+    issuerId,
+    "US Social Security Administration",
+    0, // IssuerCategory.Government
+    publicKeyHash,
+    "US",
+    0 // No expiration
+);
+
+// Authorize issuer for death certificates
+const deathCertType = ethers.keccak256(ethers.toUtf8Bytes("DEATH_CERTIFICATE"));
+await registry.authorizeIssuerForCertType(issuerId, deathCertType);
+
+// Verify issuer is trusted
+const isTrusted = await registry.isIssuerTrusted(issuerId);
+```
+
+---
+
+### ZKVerifierAdapter
+
+**Location:** `contracts/oracles/ZKVerifierAdapter.sol`
+
+Zero-knowledge proof adapter implementing the IOracle interface for privacy-preserving verification.
+
+**How ZK Verification Works:**
+
+```
+1. Off-chain: Prover has a certificate signed by a trusted issuer
+2. Off-chain: Prover generates a ZK proof that:
+   - The certificate is signed by a trusted issuer
+   - The certificate contains specific claims (e.g., death date)
+   - The certificate refers to the correct person (creator)
+3. On-chain: ZKVerifierAdapter verifies the proof
+4. On-chain: If valid, the verification is marked complete
+   (Certificate data never appears on-chain - only proof and commitments)
+```
+
+**Features:**
+- Multiple proof system support (Groth16, PLONK, STARK)
+- Integration with TrustedIssuerRegistry
+- Binary confidence (100% if verified, 0% if rejected)
+- Privacy-preserving (no certificate data on-chain)
+- Verification key management
+
+**Configuration:**
+
+```solidity
+constructor(
+    address _issuerRegistry  // TrustedIssuerRegistry address
+)
+```
+
+**Key Functions:**
+
+| Function | Description |
+|----------|-------------|
+| `registerVerificationKey()` | Register a ZK circuit verification key |
+| `requestVerification()` | Submit a verification request |
+| `submitZKProof()` | Submit a ZK proof for verification |
+| `isVerificationValid()` | Check if verification is valid (95%+ confidence) |
+| `getKeysForEventType()` | Get active verification keys for an event type |
+
+**Usage:**
+
+```javascript
+// Deploy ZKVerifierAdapter with issuer registry
+const zkAdapter = await ZKVerifierAdapter.deploy(issuerRegistry.target);
+
+// Register a verification key for death certificates
+const keyId = ethers.keccak256(ethers.toUtf8Bytes("death-groth16-v1"));
+await zkAdapter.registerVerificationKey(
+    keyId,
+    0, // ProofSystem.Groth16
+    0, // EventType.Death
+    circuitHash,
+    verificationKeyData
+);
+
+// Request verification
+const dataHash = ethers.keccak256(certificateData);
+const requestId = await zkAdapter.requestVerification(
+    creatorAddress,
+    0, // EventType.Death
+    dataHash
+);
+
+// Submit ZK proof (off-chain prover generates this)
+const creatorCommitment = ethers.keccak256(ethers.encodePacked(creatorAddress));
+const issuerCommitment = ethers.keccak256(issuerPublicKey);
+const success = await zkAdapter.submitZKProof(
+    requestId,
+    keyId,
+    zkProofBytes,
+    creatorCommitment,
+    issuerCommitment,
+    dataHash
+);
+
+// Check if verification is valid
+const isValid = await zkAdapter.isVerificationValid(requestId);
+```
+
+**ZK Proof Flow:**
+
+```
+1. Creator configures ZK proof trigger
+   └── triggerMechanism.configureZKProofVerified(eventType, dataHash, keyId)
+
+2. Family/executor requests ZK verification
+   └── triggerMechanism.requestZKVerification()
+   └── ZKVerifierAdapter.requestVerification()
+
+3. Off-chain prover generates ZK proof
+   └── Inputs: certificate, issuer signature, creator info
+   └── Outputs: proof bytes, commitments
+
+4. Prover submits ZK proof on-chain
+   └── zkAdapter.submitZKProof(requestId, keyId, proof, commitments...)
+   └── Proof verified against verification key
+   └── Issuer commitment checked against TrustedIssuerRegistry
+
+5. Complete trigger
+   └── triggerMechanism.completeZKVerification(creator)
+   └── Checks: proof valid AND confidence >= 95%
+   └── Executes trigger if valid
+```
+
+---
+
 ### TriggerMechanism (Enhanced)
 
 **Location:** `contracts/TriggerMechanism.sol`
@@ -300,11 +505,16 @@ enum OracleMode {
 | Function | Description |
 |----------|-------------|
 | `setOracleRegistry()` | Set the OracleRegistry contract address |
+| `setZKVerifier()` | Set the ZKVerifierAdapter contract address |
 | `configureEnhancedOracleVerified()` | Configure with Registry mode |
+| `configureZKProofVerified()` | Configure with ZKProof mode |
 | `requestOracleVerification()` | Request verification through registry |
-| `completeOracleVerification()` | Complete trigger when verification valid |
+| `requestZKVerification()` | Request ZK proof verification |
+| `completeOracleVerification()` | Complete trigger when registry verification valid |
+| `completeZKVerification()` | Complete trigger when ZK verification valid |
 | `getOracleConfig()` | Get oracle configuration |
-| `getVerificationStatus()` | Get verification status |
+| `getVerificationStatus()` | Get registry verification status |
+| `getZKVerificationStatus()` | Get ZK verification status |
 
 **Usage:**
 
@@ -476,17 +686,120 @@ async function deployOracleInfrastructure() {
 
 ---
 
+## Implementation Status
+
+| Phase | Component | Status |
+|-------|-----------|--------|
+| Phase 1 | ChainlinkAdapter | ✅ Implemented |
+| Phase 1 | OracleRegistry | ✅ Implemented |
+| Phase 2 | UMAAdapter | ✅ Implemented |
+| Phase 3 | IZKVerifier | ✅ Implemented |
+| Phase 3 | TrustedIssuerRegistry | ✅ Implemented |
+| Phase 3 | ZKVerifierAdapter | ✅ Implemented |
+| Phase 3 | TriggerMechanism ZK Support | ✅ Implemented |
+| Phase 4 | Circom Circuits | ✅ Implemented |
+| Phase 4 | Groth16Verifier | ✅ Implemented |
+| Phase 4 | PlonkVerifier | ✅ Implemented |
+| Phase 4 | ZKProofGenerator SDK | ✅ Implemented |
+
+---
+
+## ZK Circuits (Phase 4)
+
+### Circom Circuits
+
+**Location:** `circuits/`
+
+Three production circuits for certificate verification:
+
+| Circuit | File | Description |
+|---------|------|-------------|
+| DeathCertificateVerifier | `certificate_verifier.circom` | Verifies death certificates from government issuers |
+| MedicalIncapacitationVerifier | `medical_verifier.circom` | Verifies medical incapacitation certs with expiration |
+| LegalDocumentVerifier | `legal_verifier.circom` | Verifies probate orders and court rulings |
+
+**Circuit Features:**
+- Poseidon hash for efficient ZK operations
+- EdDSA signature verification for issuer authentication
+- Expiration checking for time-sensitive certificates
+- Creator commitment verification for identity binding
+- Certificate type enforcement
+
+**Public Inputs:**
+- `creatorCommitment` - Commitment to creator identity
+- `certificateHash` - Hash of certificate for on-chain reference
+- `currentTimestamp` - Current time for expiration check
+
+**Public Outputs:**
+- `issuerCommitment` - Commitment to issuer public key (for registry verification)
+- `isValid` - Whether certificate is valid and not expired
+
+### On-Chain Verifiers
+
+**Groth16Verifier** (`contracts/verifiers/Groth16Verifier.sol`)
+- BN254 curve operations using EVM precompiles
+- Multiple verification key support
+- Key activation/deactivation
+- ~200k gas base cost + 6k per public input
+
+**PlonkVerifier** (`contracts/verifiers/PlonkVerifier.sol`)
+- KZG polynomial commitment verification
+- Universal setup support
+- Fiat-Shamir challenge computation
+- ~350k gas base cost + 3k per public input
+
+### ZK Proof Generator SDK
+
+**Location:** `scripts/zk/zkProofGenerator.js`
+
+JavaScript library for off-chain proof generation:
+
+```javascript
+const { ZKProofGenerator, CertificateBuilder, CertificateType } = require('./zkProofGenerator');
+
+// Initialize generator
+const generator = await new ZKProofGenerator(wasmPath, zkeyPath, 'groth16').init();
+
+// Build certificate inputs
+const inputs = generator.prepareDeathCertificateInputs({
+    creatorAddress: '0x...',
+    creatorSalt: ZKProofGenerator.generateSalt(),
+    issueDate: Date.now(),
+    expirationDate: 0,
+    claimData: ethers.keccak256(...),
+    issuerPubKeyX: '...',
+    issuerPubKeyY: '...',
+    sigR8X: '...',
+    sigR8Y: '...',
+    sigS: '...',
+    currentTimestamp: Math.floor(Date.now() / 1000)
+});
+
+// Generate proof
+const { proof, publicSignals } = await generator.generateProof(inputs);
+
+// Encode for on-chain submission
+const proofBytes = generator.encodeGroth16ProofAsBytes(proof);
+```
+
+### Building Circuits
+
+```bash
+# Install dependencies
+npm install circomlib snarkjs
+
+# Build all circuits
+./scripts/zk/build_circuits.sh
+
+# Build single circuit
+./scripts/zk/build_circuits.sh death_certificate
+```
+
+---
+
 ## Future Work
 
-### Phase 3: ZK Proof Verification
-
-- Zero-knowledge circuits for certificate verification
-- On-chain verifier contracts (Groth16/PLONK)
-- Off-chain prover services
-- Trusted issuer registry for certificate authorities
-- Integration with TriggerMechanism ZKProof mode
-
-### Phase 4: Additional Oracle Sources
+### Phase 5: Additional Oracle Sources
 
 - API3 dAPI integration
 - Band Protocol cross-chain data
@@ -495,22 +808,24 @@ async function deployOracleInfrastructure() {
 
 ---
 
-## Comparison: Chainlink vs UMA
+## Comparison: Oracle Adapters
 
-| Aspect | ChainlinkAdapter | UMAAdapter |
-|--------|------------------|------------|
-| **Model** | Request/Response | Optimistic Assertion |
-| **Speed** | Fast (minutes) | Slower (hours for liveness) |
-| **Cost** | LINK fees | Bond (refundable if honest) |
-| **Security** | Node reputation | Economic security |
-| **Disputes** | No built-in | DVM resolution |
-| **Confidence** | Variable (0-100%) | Binary (100% or 0%) |
-| **Best For** | Quick verifications | Contested claims |
+| Aspect | ChainlinkAdapter | UMAAdapter | ZKVerifierAdapter |
+|--------|------------------|------------|-------------------|
+| **Model** | Request/Response | Optimistic Assertion | ZK Proof Verification |
+| **Speed** | Fast (minutes) | Slower (hours for liveness) | Fast (on proof submission) |
+| **Cost** | LINK fees | Bond (refundable if honest) | Gas for verification |
+| **Security** | Node reputation | Economic security | Cryptographic proof |
+| **Disputes** | No built-in | DVM resolution | None (mathematically verified) |
+| **Confidence** | Variable (0-100%) | Binary (100% or 0%) | Binary (100% or 0%) |
+| **Privacy** | Data on-chain | Claim on-chain | Data stays off-chain |
+| **Best For** | Quick verifications | Contested claims | Privacy-sensitive verification |
 
-**Recommendation:** Use both in multi-oracle consensus:
-- Chainlink for fast initial verification
-- UMA for disputed or high-value triggers
-- Registry aggregates results from both
+**Recommendation:** Choose based on use case:
+- **Chainlink**: Fast verification for non-sensitive data
+- **UMA**: High-value or potentially contested triggers
+- **ZKVerifier**: Privacy-preserving verification (death certs, medical records)
+- **Registry + multiple adapters**: Maximum security and redundancy
 
 ---
 

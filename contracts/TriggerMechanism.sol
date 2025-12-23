@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./oracles/IOracle.sol";
 import "./oracles/OracleRegistry.sol";
+import "./oracles/ZKVerifierAdapter.sol";
 
 interface IIntentCaptureModule {
     function triggerIntent(address _creator) external;
@@ -66,12 +67,15 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
         IOracle.EventType eventType;    // Type of event to verify (death, incapacitation, etc.)
         bytes32 dataHash;               // Hash of verification data (for privacy)
         bytes32 aggregationId;          // OracleRegistry aggregation ID (if using Registry mode)
+        bytes32 zkRequestId;            // ZKVerifierAdapter request ID (if using ZKProof mode)
+        bytes32 zkKeyId;                // ZK verification key ID (if using ZKProof mode)
         uint256 requiredConfidence;     // Minimum confidence score (default: 95)
         bool useRegistry;               // Whether to use OracleRegistry
     }
 
     IIntentCaptureModule public intentModule;
     OracleRegistry public oracleRegistry;
+    ZKVerifierAdapter public zkVerifier;
 
     mapping(address => TriggerConfig) public triggers;
     mapping(address => OracleConfig) public oracleConfigs;
@@ -97,6 +101,16 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
         bool isValid,
         uint256 confidenceScore
     );
+    event ZKVerifierSet(address indexed oldVerifier, address indexed newVerifier);
+    event ZKVerificationRequested(
+        address indexed creator,
+        bytes32 indexed requestId,
+        bytes32 indexed keyId
+    );
+    event ZKVerificationCompleted(
+        address indexed creator,
+        bool isValid
+    );
 
     constructor(address _intentModuleAddress) Ownable(msg.sender) {
         intentModule = IIntentCaptureModule(_intentModuleAddress);
@@ -111,6 +125,17 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
         address oldRegistry = address(oracleRegistry);
         oracleRegistry = OracleRegistry(_registry);
         emit OracleRegistrySet(oldRegistry, _registry);
+    }
+
+    /**
+     * @dev Set the ZKVerifierAdapter contract address
+     * @param _verifier Address of the ZKVerifierAdapter contract
+     */
+    function setZKVerifier(address _verifier) external onlyOwner {
+        require(_verifier != address(0), "Invalid verifier address");
+        address oldVerifier = address(zkVerifier);
+        zkVerifier = ZKVerifierAdapter(_verifier);
+        emit ZKVerifierSet(oldVerifier, _verifier);
     }
 
     /**
@@ -187,6 +212,8 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
             eventType: IOracle.EventType.Death,
             dataHash: bytes32(0),
             aggregationId: bytes32(0),
+            zkRequestId: bytes32(0),
+            zkKeyId: bytes32(0),
             requiredConfidence: MIN_CONFIDENCE_THRESHOLD,
             useRegistry: false
         });
@@ -225,6 +252,8 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
             eventType: _eventType,
             dataHash: _dataHash,
             aggregationId: bytes32(0),
+            zkRequestId: bytes32(0),
+            zkKeyId: bytes32(0),
             requiredConfidence: MIN_CONFIDENCE_THRESHOLD,
             useRegistry: true
         });
@@ -292,6 +321,141 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
 
         _executeTrigger(_creator, config);
     }
+
+    // =============================================================================
+    // ZK PROOF VERIFICATION FUNCTIONS
+    // =============================================================================
+
+    /**
+     * @dev Configures ZK proof verified trigger
+     * @param _eventType Type of event to verify (Death, Incapacitation, LegalEvent, Custom)
+     * @param _dataHash Hash of verification data (certificate hash)
+     * @param _zkKeyId Verification key ID to use for ZK proof verification
+     */
+    function configureZKProofVerified(
+        IOracle.EventType _eventType,
+        bytes32 _dataHash,
+        bytes32 _zkKeyId
+    ) external {
+        require(address(zkVerifier) != address(0), "ZK verifier not set");
+        require(!triggers[msg.sender].isTriggered, "Already triggered");
+        require(_dataHash != bytes32(0), "Data hash required");
+        require(_zkKeyId != bytes32(0), "ZK key ID required");
+        require(zkVerifier.isKeyActive(_zkKeyId), "ZK key not active");
+
+        triggers[msg.sender] = TriggerConfig({
+            triggerType: TriggerType.OracleVerified,
+            deadmanInterval: 0,
+            lastCheckIn: 0,
+            trustedSigners: new address[](0),
+            requiredSignatures: 0,
+            oracles: new address[](0),
+            isConfigured: true,
+            isTriggered: false
+        });
+
+        oracleConfigs[msg.sender] = OracleConfig({
+            mode: OracleMode.ZKProof,
+            eventType: _eventType,
+            dataHash: _dataHash,
+            aggregationId: bytes32(0),
+            zkRequestId: bytes32(0),
+            zkKeyId: _zkKeyId,
+            requiredConfidence: MIN_CONFIDENCE_THRESHOLD,
+            useRegistry: false
+        });
+
+        emit TriggerConfigured(msg.sender, TriggerType.OracleVerified);
+    }
+
+    /**
+     * @dev Request ZK proof verification through ZKVerifierAdapter
+     * @return requestId The request ID for tracking
+     */
+    function requestZKVerification() external nonReentrant returns (bytes32 requestId) {
+        TriggerConfig storage config = triggers[msg.sender];
+        OracleConfig storage oracleConfig = oracleConfigs[msg.sender];
+
+        require(config.isConfigured, "Trigger not configured");
+        require(config.triggerType == TriggerType.OracleVerified, "Not an oracle trigger");
+        require(!config.isTriggered, "Already triggered");
+        require(oracleConfig.mode == OracleMode.ZKProof, "Not using ZK proof mode");
+        require(oracleConfig.zkRequestId == bytes32(0), "Verification already requested");
+
+        requestId = zkVerifier.requestVerification(
+            msg.sender,
+            oracleConfig.eventType,
+            oracleConfig.dataHash
+        );
+
+        oracleConfig.zkRequestId = requestId;
+
+        emit ZKVerificationRequested(msg.sender, requestId, oracleConfig.zkKeyId);
+
+        return requestId;
+    }
+
+    /**
+     * @dev Complete trigger based on ZK proof verification result
+     * @param _creator Address of the intent creator
+     * @notice This should be called after a ZK proof has been submitted and verified
+     */
+    function completeZKVerification(address _creator) external nonReentrant {
+        TriggerConfig storage config = triggers[_creator];
+        OracleConfig storage oracleConfig = oracleConfigs[_creator];
+
+        require(config.isConfigured, "Trigger not configured");
+        require(config.triggerType == TriggerType.OracleVerified, "Not an oracle trigger");
+        require(!config.isTriggered, "Already triggered");
+        require(oracleConfig.mode == OracleMode.ZKProof, "Not using ZK proof mode");
+        require(oracleConfig.zkRequestId != bytes32(0), "No verification requested");
+
+        // Check if ZK verification is valid
+        bool isValid = zkVerifier.isVerificationValid(oracleConfig.zkRequestId);
+
+        emit ZKVerificationCompleted(_creator, isValid);
+
+        require(isValid, "ZK verification not valid");
+
+        _executeTrigger(_creator, config);
+    }
+
+    /**
+     * @dev Get ZK verification status for a creator
+     * @return requestId The ZK request ID (bytes32(0) if not using ZK mode)
+     * @return keyId The ZK verification key ID
+     * @return isComplete Whether verification is complete
+     * @return isValid Whether verification is valid
+     */
+    function getZKVerificationStatus(address _creator)
+        external
+        view
+        returns (
+            bytes32 requestId,
+            bytes32 keyId,
+            bool isComplete,
+            bool isValid
+        )
+    {
+        OracleConfig memory oracleConfig = oracleConfigs[_creator];
+
+        if (oracleConfig.mode != OracleMode.ZKProof || oracleConfig.zkRequestId == bytes32(0)) {
+            return (bytes32(0), bytes32(0), false, false);
+        }
+
+        IOracle.VerificationRequest memory request = zkVerifier.getVerificationStatus(oracleConfig.zkRequestId);
+
+        return (
+            oracleConfig.zkRequestId,
+            oracleConfig.zkKeyId,
+            request.status != IOracle.VerificationStatus.Pending,
+            request.status == IOracle.VerificationStatus.Verified && request.confidenceScore >= MIN_CONFIDENCE_THRESHOLD
+        );
+    }
+
+    // =============================================================================
+    // DEADMAN SWITCH FUNCTIONS
+    // =============================================================================
 
     /**
      * @dev Check in to reset deadman switch timer

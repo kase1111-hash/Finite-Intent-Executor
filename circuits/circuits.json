@@ -1,0 +1,44 @@
+{
+  "circuits": [
+    {
+      "name": "death_certificate",
+      "source": "certificate_verifier.circom",
+      "template": "DeathCertificateVerifier",
+      "publicInputs": ["creatorCommitment", "certificateHash", "currentTimestamp"],
+      "publicOutputs": ["issuerCommitment", "isValid"],
+      "proofSystem": "groth16",
+      "ptauPower": 16,
+      "description": "Verifies death certificates from trusted government issuers"
+    },
+    {
+      "name": "medical_incapacitation",
+      "source": "medical_verifier.circom",
+      "template": "MedicalIncapacitationVerifier",
+      "publicInputs": ["creatorCommitment", "certificateHash", "currentTimestamp"],
+      "publicOutputs": ["issuerCommitment", "isValid"],
+      "proofSystem": "groth16",
+      "ptauPower": 16,
+      "description": "Verifies medical incapacitation certificates"
+    },
+    {
+      "name": "legal_document",
+      "source": "legal_verifier.circom",
+      "template": "LegalDocumentVerifier",
+      "publicInputs": ["creatorCommitment", "certificateHash", "currentTimestamp", "expectedDocType"],
+      "publicOutputs": ["issuerCommitment", "isValid"],
+      "proofSystem": "groth16",
+      "ptauPower": 16,
+      "description": "Verifies legal documents (probate orders, court rulings)"
+    }
+  ],
+  "ptau": {
+    "url": "https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_16.ptau",
+    "hash": "0x..."
+  },
+  "build": {
+    "outputDir": "./build",
+    "wasmDir": "./build/wasm",
+    "zkeyDir": "./build/zkey",
+    "verifierDir": "../contracts/verifiers"
+  }
+}

@@ -140,12 +140,12 @@ This specification turns the problem of posthumous intent from an intractable tr
 
 ### Smart Contracts
 
-All core smart contracts are implemented (6 core + 4 oracle):
+All core smart contracts are implemented (6 core + 9 oracle/verifier):
 
 | Contract | File | Status | Notes |
 |----------|------|--------|-------|
 | **IntentCaptureModule** | `contracts/IntentCaptureModule.sol` | Implemented | Intent capture, goals, revocation, multi-version signing |
-| **TriggerMechanism** | `contracts/TriggerMechanism.sol` | Implemented | Deadman switch, quorum, enhanced oracle integration |
+| **TriggerMechanism** | `contracts/TriggerMechanism.sol` | Implemented | Deadman switch, quorum, enhanced oracle + ZK integration |
 | **ExecutionAgent** | `contracts/ExecutionAgent.sol` | Implemented | 95% confidence threshold, political filtering, licensing |
 | **LexiconHolder** | `contracts/LexiconHolder.sol` | Implemented | Corpus freezing, semantic indexing, clustering |
 | **SunsetProtocol** | `contracts/SunsetProtocol.sol` | Implemented | 20-year enforcement, public domain transition |
@@ -154,6 +154,19 @@ All core smart contracts are implemented (6 core + 4 oracle):
 | **ChainlinkAdapter** | `contracts/oracles/ChainlinkAdapter.sol` | Implemented | Chainlink Any API integration |
 | **UMAAdapter** | `contracts/oracles/UMAAdapter.sol` | Implemented | UMA Optimistic Oracle with dispute resolution |
 | **OracleRegistry** | `contracts/oracles/OracleRegistry.sol` | Implemented | Multi-oracle consensus and reputation |
+| **IZKVerifier** | `contracts/oracles/IZKVerifier.sol` | Implemented | ZK proof verifier interface |
+| **TrustedIssuerRegistry** | `contracts/oracles/TrustedIssuerRegistry.sol` | Implemented | Certificate authority registry |
+| **ZKVerifierAdapter** | `contracts/oracles/ZKVerifierAdapter.sol` | Implemented | ZK proof verification oracle adapter |
+| **Groth16Verifier** | `contracts/verifiers/Groth16Verifier.sol` | Implemented | On-chain Groth16 proof verification |
+| **PlonkVerifier** | `contracts/verifiers/PlonkVerifier.sol` | Implemented | On-chain PLONK proof verification |
+
+### ZK Circuits
+
+| Circuit | File | Status | Notes |
+|---------|------|--------|-------|
+| DeathCertificateVerifier | `circuits/certificate_verifier.circom` | Implemented | Death certificate ZK verification |
+| MedicalIncapacitationVerifier | `circuits/medical_verifier.circom` | Implemented | Medical certificate with expiration |
+| LegalDocumentVerifier | `circuits/legal_verifier.circom` | Implemented | Probate orders, court rulings |
 
 ### Additional Tools
 
@@ -161,6 +174,8 @@ All core smart contracts are implemented (6 core + 4 oracle):
 |------|----------|--------|-------|
 | Deployment Script | `scripts/deploy.js` | Implemented | Local and network deployment |
 | License Suggester | `scripts/license_suggester.py` | Implemented | Optional Ollama-based license suggestions |
+| ZK Proof Generator | `scripts/zk/zkProofGenerator.js` | Implemented | Off-chain proof generation SDK |
+| Circuit Build Script | `scripts/zk/build_circuits.sh` | Implemented | Compile circuits and generate keys |
 | Test Suite | `test/FIESystem.test.js` | Basic | Core functionality tested, ~30% coverage |
 
 ---
@@ -192,7 +207,7 @@ All core smart contracts are implemented (6 core + 4 oracle):
 
 | Feature | Current State | Gap |
 |---------|---------------|-----|
-| **Oracle Integration** | ChainlinkAdapter + UMAAdapter + OracleRegistry | ZK proof verification pending |
+| **Oracle Integration** | ChainlinkAdapter + UMAAdapter + OracleRegistry + ZKVerifierAdapter | Production ZK circuits pending |
 | **Political Activity Filtering** | Basic keyword matching | Needs LLM-based intent classification |
 | **Semantic Search** | Exact keyword lookup | No vector embeddings or fuzzy matching |
 | **Test Coverage** | Basic unit tests | Missing integration, security, and gas tests |
@@ -208,7 +223,7 @@ All core smart contracts are implemented (6 core + 4 oracle):
 | 1 | **External Security Audit** | Internal audit complete, external audit pending | Partial |
 | 2 | **Formal Verification** | Certora specs written, SMTChecker configured, verification pending | Partial |
 | 3 | **Comprehensive Test Suite** | Current coverage ~30%, need 90%+ with fuzzing | Pending |
-| 4 | **Enhanced Oracle Integration** | OracleRegistry and ChainlinkAdapter implemented; ZK proof verification pending | Partial |
+| 4 | **Enhanced Oracle Integration** | OracleRegistry, ChainlinkAdapter, UMAAdapter, ZKVerifierAdapter implemented; production ZK circuits pending | Mostly Complete |
 | 5 | **Frontend/UI** | No user interface, contract interaction via scripts only | Pending |
 
 ### High Priority
@@ -285,7 +300,7 @@ The Finite Intent Executor core contracts are implemented and functional. The sy
 - External security audit pending (internal audit complete)
 - Limited testing coverage (~30%, need 90%+)
 - No frontend/UI for users
-- Oracle ZK proof verification pending (infrastructure complete)
+- Trusted setup ceremony for production ZK circuits pending
 - Basic keyword-based filtering (not LLM-based)
 
 **Production Readiness:** Requires additional development in security, testing, and usability before mainnet deployment.
