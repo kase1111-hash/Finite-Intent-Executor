@@ -203,11 +203,17 @@ contract TriggerMechanism is Ownable {
 
     /**
      * @dev Internal function to execute trigger
+     * @notice Follows checks-effects-interactions pattern
      */
     function _executeTrigger(address _creator, TriggerConfig storage config) internal {
+        // Effects first
         config.isTriggered = true;
-        intentModule.triggerIntent(_creator);
+
+        // Emit event before external call
         emit IntentTriggered(_creator, block.timestamp, config.triggerType);
+
+        // External interaction last
+        intentModule.triggerIntent(_creator);
     }
 
     /**

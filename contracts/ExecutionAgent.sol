@@ -9,7 +9,7 @@ interface ILexiconHolder {
         address _creator,
         string memory _query,
         bytes32 _corpusHash
-    ) external view returns (string memory citation, uint256 confidence);
+    ) external returns (string memory citation, uint256 confidence);
 }
 
 /**
@@ -229,8 +229,8 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
             return;
         }
 
+        // Effects first (state changes before external call)
         treasuries[_creator] -= _amount;
-        payable(_recipient).transfer(_amount);
 
         Project memory project = Project({
             description: _description,
@@ -242,6 +242,10 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
 
         fundedProjects[_creator].push(project);
         emit ProjectFunded(_creator, _recipient, _amount);
+
+        // External interaction last
+        (bool success, ) = payable(_recipient).call{value: _amount}("");
+        require(success, "Project funding transfer failed");
     }
 
     /**
@@ -265,10 +269,13 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
         require(isExecutionActive(_creator), "Execution not active or sunset");
         require(treasuries[_creator] >= _amount, "Insufficient treasury funds");
 
+        // Effects first (state changes before external call)
         treasuries[_creator] -= _amount;
-        payable(_recipient).transfer(_amount);
-
         emit RevenueDistributed(_creator, _recipient, _amount);
+
+        // External interaction last
+        (bool success, ) = payable(_recipient).call{value: _amount}("");
+        require(success, "Revenue distribution failed");
     }
 
     /**

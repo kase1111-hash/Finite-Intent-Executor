@@ -35,6 +35,9 @@ contract IntentCaptureModule is Ownable {
     mapping(address => Goal[]) public goals;
     mapping(address => mapping(bytes32 => bool)) public signedVersions;
 
+    // Address of the TriggerMechanism contract that can trigger intents
+    address public triggerMechanism;
+
     event IntentCaptured(
         address indexed creator,
         bytes32 intentHash,
@@ -44,6 +47,7 @@ contract IntentCaptureModule is Ownable {
     event IntentRevoked(address indexed creator, uint256 revokeTimestamp);
     event IntentTriggered(address indexed creator, uint256 triggerTimestamp);
     event GoalAdded(address indexed creator, string description, uint256 priority);
+    event TriggerMechanismSet(address indexed oldMechanism, address indexed newMechanism);
 
     modifier notTriggered() {
         require(!intents[msg.sender].isTriggered, "Intent already triggered");
@@ -139,9 +143,23 @@ contract IntentCaptureModule is Ownable {
     }
 
     /**
-     * @dev Marks intent as triggered (only callable by TriggerMechanism contract)
+     * @dev Sets the TriggerMechanism contract address (only owner)
+     * @param _triggerMechanism Address of the TriggerMechanism contract
      */
-    function triggerIntent(address _creator) external onlyOwner notRevoked {
+    function setTriggerMechanism(address _triggerMechanism) external onlyOwner {
+        require(_triggerMechanism != address(0), "Invalid address");
+        address oldMechanism = triggerMechanism;
+        triggerMechanism = _triggerMechanism;
+        emit TriggerMechanismSet(oldMechanism, _triggerMechanism);
+    }
+
+    /**
+     * @dev Marks intent as triggered (only callable by TriggerMechanism contract)
+     * @param _creator Address of the intent creator
+     */
+    function triggerIntent(address _creator) external {
+        require(msg.sender == triggerMechanism, "Only TriggerMechanism can trigger");
+        require(!intents[_creator].isRevoked, "Intent has been revoked");
         require(intents[_creator].intentHash != bytes32(0), "Intent not captured");
         require(!intents[_creator].isTriggered, "Already triggered");
 
