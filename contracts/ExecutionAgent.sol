@@ -14,17 +14,33 @@ interface ILexiconHolder {
 
 /**
  * @title ExecutionAgent
+ * @author Finite Intent Executor
  * @dev Narrow, scope-bounded AI executor with strict interpretation rules
  * Capabilities: License assets, collect/distribute revenue, fund projects, enforce constraints
  * All ambiguous terms resolved via RAG against frozen contextual corpus
  * Defaults to inaction if confidence < 95%
+ *
+ * @custom:security-contact security@finiteintent.example
+ *
+ * FORMAL VERIFICATION INVARIANTS:
+ * @custom:invariant CONFIDENCE_THRESHOLD == 95 (immutable)
+ * @custom:invariant SUNSET_DURATION == 20 years (immutable)
+ * @custom:invariant isSunset[creator] can only transition false -> true (irreversible)
+ * @custom:invariant Actions blocked when confidence < 95%
+ * @custom:invariant Political actions always blocked
+ * @custom:invariant Execution inactive after sunset or 20 years elapsed
  */
 contract ExecutionAgent is AccessControl, ReentrancyGuard {
     bytes32 public constant EXECUTOR_ROLE = keccak256("EXECUTOR_ROLE");
     bytes32 public constant ORACLE_ROLE = keccak256("ORACLE_ROLE");
 
-    uint256 public constant CONFIDENCE_THRESHOLD = 95; // 95% confidence required
-    uint256 public constant SUNSET_DURATION = 20 * 365 days; // 20 years
+    /// @notice Confidence threshold for action execution (immutable: 95%)
+    /// @custom:invariant This value MUST always equal 95
+    uint256 public constant CONFIDENCE_THRESHOLD = 95;
+
+    /// @notice Duration before mandatory sunset (immutable: 20 years)
+    /// @custom:invariant This value MUST always equal 20 * 365 days
+    uint256 public constant SUNSET_DURATION = 20 * 365 days;
 
     struct ExecutionRecord {
         address creator;

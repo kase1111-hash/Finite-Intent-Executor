@@ -8,6 +8,26 @@ module.exports = {
       optimizer: {
         enabled: true,
         runs: 200
+      },
+      // SMTChecker for formal verification
+      modelChecker: {
+        contracts: {
+          "contracts/ExecutionAgent.sol": ["ExecutionAgent"],
+          "contracts/SunsetProtocol.sol": ["SunsetProtocol"],
+          "contracts/IntentCaptureModule.sol": ["IntentCaptureModule"],
+          "contracts/LexiconHolder.sol": ["LexiconHolder"]
+        },
+        engine: "chc",  // Constrained Horn Clauses engine
+        targets: [
+          "assert",
+          "underflow",
+          "overflow",
+          "divByZero",
+          "constantCondition",
+          "popEmptyArray",
+          "outOfBounds"
+        ],
+        timeout: 20000  // 20 seconds per query
       }
     }
   },
