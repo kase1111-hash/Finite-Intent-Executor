@@ -140,7 +140,7 @@ This specification turns the problem of posthumous intent from an intractable tr
 
 ### Smart Contracts
 
-All core smart contracts are implemented (6 core + 3 oracle):
+All core smart contracts are implemented (6 core + 4 oracle):
 
 | Contract | File | Status | Notes |
 |----------|------|--------|-------|
@@ -152,6 +152,7 @@ All core smart contracts are implemented (6 core + 3 oracle):
 | **IPToken** | `contracts/IPToken.sol` | Implemented | ERC721, licensing, royalties |
 | **IOracle** | `contracts/oracles/IOracle.sol` | Implemented | Standard oracle interface |
 | **ChainlinkAdapter** | `contracts/oracles/ChainlinkAdapter.sol` | Implemented | Chainlink Any API integration |
+| **UMAAdapter** | `contracts/oracles/UMAAdapter.sol` | Implemented | UMA Optimistic Oracle with dispute resolution |
 | **OracleRegistry** | `contracts/oracles/OracleRegistry.sol` | Implemented | Multi-oracle consensus and reputation |
 
 ### Additional Tools
@@ -191,7 +192,7 @@ All core smart contracts are implemented (6 core + 3 oracle):
 
 | Feature | Current State | Gap |
 |---------|---------------|-----|
-| **Oracle Integration** | OracleRegistry with multi-oracle consensus, ChainlinkAdapter | ZK proof verification pending, needs Chainlink node setup |
+| **Oracle Integration** | ChainlinkAdapter + UMAAdapter + OracleRegistry | ZK proof verification pending |
 | **Political Activity Filtering** | Basic keyword matching | Needs LLM-based intent classification |
 | **Semantic Search** | Exact keyword lookup | No vector embeddings or fuzzy matching |
 | **Test Coverage** | Basic unit tests | Missing integration, security, and gas tests |
