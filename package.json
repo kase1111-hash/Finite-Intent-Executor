@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@openzeppelin/contracts": "^5.0.0",
-    "@chainlink/contracts": "^1.1.0"
+    "@chainlink/contracts": "^1.1.0",
+    "@uma/core": "^2.56.0"
   }
 }

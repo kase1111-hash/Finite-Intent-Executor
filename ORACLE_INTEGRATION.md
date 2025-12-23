@@ -24,7 +24,7 @@ The Oracle Integration module provides secure, verifiable external data feeds fo
 │              │                        │                        │
 │     ┌────────▼────────┐    ┌─────────▼─────────┐    ┌────────▼────────┐
 │     │ ChainlinkAdapter │    │   UMAAdapter      │    │   ZKVerifier    │
-│     │  (Implemented)   │    │   (Future)        │    │   (Future)      │
+│     │  (Implemented)   │    │  (Implemented)    │    │   (Future)      │
 │     └─────────────────┘    └───────────────────┘    └─────────────────┘
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -116,6 +116,113 @@ await adapter.fulfillVerification(
     1, // VerificationStatus.Verified
     98 // 98% confidence
 );
+```
+
+---
+
+### UMAAdapter
+
+**Location:** `contracts/oracles/UMAAdapter.sol`
+
+UMA Optimistic Oracle adapter providing economic dispute resolution.
+
+**How UMA Works:**
+
+Unlike Chainlink (request/response), UMA uses an optimistic approach:
+1. An **asserter** makes a claim (e.g., "Person X died on 2025-01-01")
+2. A **bond** is posted with the assertion
+3. During the **liveness period**, anyone can dispute
+4. If **disputed**, UMA's Data Verification Mechanism (DVM) resolves it
+5. If **undisputed**, the assertion is accepted as truth
+6. The **loser forfeits their bond** to the winner
+
+**Features:**
+- Economic security through bonding
+- Dispute resolution via UMA DVM
+- Configurable liveness period (default: 2 hours)
+- Callback support for dispute resolution
+- Binary confidence (100% if verified, 0% if rejected)
+
+**Configuration:**
+
+```solidity
+constructor(
+    address _optimisticOracle,  // UMA Optimistic Oracle V3 address
+    address _bondCurrency,      // Bond token (USDC, UMA, etc.)
+    uint256 _bondAmount,        // Bond amount (default: 1000e18)
+    uint64 _liveness            // Dispute window (default: 2 hours)
+)
+```
+
+**Usage:**
+
+```javascript
+// Deploy UMAAdapter
+const umaAdapter = await UMAAdapter.deploy(
+    optimisticOracleV3Address,
+    usdcAddress,
+    ethers.parseUnits("100", 6), // 100 USDC bond
+    7200 // 2 hour liveness
+);
+
+// Request verification (creates pending request)
+const requestId = await umaAdapter.requestVerification(
+    creatorAddress,
+    0, // EventType.Death
+    dataHash
+);
+
+// Approve bond tokens
+await usdc.approve(umaAdapter.target, bondAmount);
+
+// Make assertion with claim
+const claim = ethers.toUtf8Bytes("Person 0x123... died on 2025-01-15");
+const assertionId = await umaAdapter.assertVerification(requestId, claim);
+
+// Wait for liveness period...
+
+// Settle (if no dispute)
+await umaAdapter.settleVerification(requestId);
+
+// Check result
+const isValid = await umaAdapter.isVerificationValid(requestId);
+```
+
+**UMA-Specific Functions:**
+
+| Function | Description |
+|----------|-------------|
+| `assertVerification()` | Make assertion with bond |
+| `settleVerification()` | Settle after liveness period |
+| `disputeVerification()` | Dispute an assertion (requires bond) |
+| `assertionResolvedCallback()` | Callback from DVM resolution |
+| `canSettle()` | Check if liveness period passed |
+| `getBondConfig()` | Get bond configuration |
+
+**Dispute Flow:**
+
+```
+1. Asserter makes claim
+   └── assertVerification(requestId, claim)
+   └── Bond transferred to adapter
+
+2. Liveness period begins (2 hours default)
+   └── Anyone can dispute during this window
+
+3a. No dispute → Settle
+    └── settleVerification(requestId)
+    └── Asserter gets bond back
+    └── Verification marked as Verified
+
+3b. Dispute filed
+    └── disputeVerification(requestId)
+    └── Disputer posts bond
+    └── Goes to UMA DVM for resolution
+
+4. DVM Resolution (if disputed)
+   └── UMA token holders vote
+   └── Winner gets both bonds
+   └── assertionResolvedCallback() called
 ```
 
 ---
@@ -326,12 +433,12 @@ The OracleRegistry tracks oracle reliability:
 ### Prerequisites
 
 ```bash
-npm install @chainlink/contracts
+npm install @chainlink/contracts @uma/core
 ```
 
 ### Deployment Order
 
-1. Deploy `ChainlinkAdapter` (or other adapters)
+1. Deploy oracle adapters (`ChainlinkAdapter`, `UMAAdapter`)
 2. Deploy `OracleRegistry`
 3. Register adapters with `OracleRegistry`
 4. Set `OracleRegistry` on `TriggerMechanism`
@@ -371,24 +478,39 @@ async function deployOracleInfrastructure() {
 
 ## Future Work
 
-### Phase 2: UMA Integration
-
-- UMA Optimistic Oracle for dispute resolution
-- Economic security through bonding
-- Longer dispute windows for contested events
-
 ### Phase 3: ZK Proof Verification
 
 - Zero-knowledge circuits for certificate verification
-- On-chain verifier contracts
+- On-chain verifier contracts (Groth16/PLONK)
 - Off-chain prover services
-- Trusted issuer registry
+- Trusted issuer registry for certificate authorities
+- Integration with TriggerMechanism ZKProof mode
 
 ### Phase 4: Additional Oracle Sources
 
 - API3 dAPI integration
 - Band Protocol cross-chain data
 - Pyth Network price feeds (if relevant)
+- Custom oracle adapters for specific jurisdictions
+
+---
+
+## Comparison: Chainlink vs UMA
+
+| Aspect | ChainlinkAdapter | UMAAdapter |
+|--------|------------------|------------|
+| **Model** | Request/Response | Optimistic Assertion |
+| **Speed** | Fast (minutes) | Slower (hours for liveness) |
+| **Cost** | LINK fees | Bond (refundable if honest) |
+| **Security** | Node reputation | Economic security |
+| **Disputes** | No built-in | DVM resolution |
+| **Confidence** | Variable (0-100%) | Binary (100% or 0%) |
+| **Best For** | Quick verifications | Contested claims |
+
+**Recommendation:** Use both in multi-oracle consensus:
+- Chainlink for fast initial verification
+- UMA for disputed or high-value triggers
+- Registry aggregates results from both
 
 ---
 
