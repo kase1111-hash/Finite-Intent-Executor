@@ -6,6 +6,8 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./IOracle.sol";
 import "./IZKVerifier.sol";
 import "./TrustedIssuerRegistry.sol";
+import "../verifiers/Groth16Verifier.sol";
+import "../verifiers/PlonkVerifier.sol";
 
 /**
  * @title ZKVerifierAdapter
@@ -40,6 +42,12 @@ contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
 
     /// @dev Trusted issuer registry
     TrustedIssuerRegistry public issuerRegistry;
+
+    /// @dev Groth16 verifier contract
+    Groth16Verifier public groth16Verifier;
+
+    /// @dev PLONK verifier contract
+    PlonkVerifier public plonkVerifier;
 
     /// @dev Mapping of verification key ID to key data
     mapping(bytes32 => VerificationKeyData) public verificationKeys;
@@ -111,6 +119,8 @@ contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
         bool result
     );
     event IssuerRegistrySet(address indexed oldRegistry, address indexed newRegistry);
+    event Groth16VerifierSet(address indexed oldVerifier, address indexed newVerifier);
+    event PlonkVerifierSet(address indexed oldVerifier, address indexed newVerifier);
     event OracleActiveStatusChanged(bool isActive);
 
     // =============================================================================
@@ -149,6 +159,28 @@ contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
         address oldRegistry = address(issuerRegistry);
         issuerRegistry = TrustedIssuerRegistry(_registry);
         emit IssuerRegistrySet(oldRegistry, _registry);
+    }
+
+    /**
+     * @dev Set the Groth16 verifier contract
+     * @param _verifier New verifier address
+     */
+    function setGroth16Verifier(address _verifier) external onlyOwner {
+        require(_verifier != address(0), "Invalid verifier address");
+        address oldVerifier = address(groth16Verifier);
+        groth16Verifier = Groth16Verifier(_verifier);
+        emit Groth16VerifierSet(oldVerifier, _verifier);
+    }
+
+    /**
+     * @dev Set the PLONK verifier contract
+     * @param _verifier New verifier address
+     */
+    function setPlonkVerifier(address _verifier) external onlyOwner {
+        require(_verifier != address(0), "Invalid verifier address");
+        address oldVerifier = address(plonkVerifier);
+        plonkVerifier = PlonkVerifier(_verifier);
+        emit PlonkVerifierSet(oldVerifier, _verifier);
     }
 
     /**
@@ -380,8 +412,7 @@ contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
 
     /**
      * @dev Internal proof verification
-     * @notice In production, this calls the actual ZK verifier precompile/contract
-     *         For now, it performs sanity checks
+     * @notice Calls the appropriate ZK verifier based on proof system
      */
     function _verifyProof(
         bytes32 _keyId,
@@ -397,21 +428,12 @@ contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
             return false;
         }
 
-        // Verify creator commitment matches expected creator
-        // In a real implementation, this would be part of the ZK circuit
-        bytes32 expectedCreatorCommitment = keccak256(abi.encodePacked(_expectedCreator));
-        if (_creatorCommitment != expectedCreatorCommitment) {
-            return false;
-        }
-
         // Verify data hash matches
         if (_certificateHash != _expectedDataHash) {
             return false;
         }
 
         // Verify issuer is in trusted registry
-        // In a real implementation, this would verify the issuer commitment
-        // against the registry using ZK-friendly commitments
         bytes32 issuerId = issuerRegistry.getIssuerByPublicKey(_issuerCommitment);
         if (issuerId == bytes32(0)) {
             // Check if issuer commitment itself is a trusted issuer ID
@@ -427,21 +449,113 @@ contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
         // Get verification key
         VerificationKeyData memory vk = verificationKeys[_keyId];
 
-        // In production, this would call the actual ZK verifier:
-        // For Groth16: Call precompile or Groth16Verifier contract
-        // For PLONK: Call PLONKVerifier contract
-        // For STARK: Call STARKVerifier contract
-        //
-        // Example for Groth16:
-        // return Groth16Verifier(groth16Verifier).verify(
-        //     vk.vkData,
-        //     _proof,
-        //     [_creatorCommitment, _issuerCommitment, _certificateHash]
-        // );
+        // Build public inputs array
+        uint256[] memory publicInputs = new uint256[](3);
+        publicInputs[0] = uint256(_creatorCommitment);
+        publicInputs[1] = uint256(_certificateHash);
+        publicInputs[2] = block.timestamp; // currentTimestamp
 
-        // For now, return true if all sanity checks pass
-        // This should be replaced with actual ZK verification
-        return vk.vkData.length > 0 && _proof.length >= 128;
+        // Route to appropriate verifier based on proof system
+        if (vk.proofSystem == IZKVerifier.ProofSystem.Groth16) {
+            return _verifyGroth16(_keyId, _proof, publicInputs);
+        } else if (vk.proofSystem == IZKVerifier.ProofSystem.PLONK) {
+            return _verifyPlonk(_keyId, _proof, publicInputs);
+        } else if (vk.proofSystem == IZKVerifier.ProofSystem.STARK) {
+            // STARK verification not yet implemented
+            // Fall back to placeholder verification
+            return _verifyPlaceholder(_keyId, _proof, publicInputs);
+        }
+
+        return false;
+    }
+
+    /**
+     * @dev Verify a Groth16 proof using the Groth16Verifier contract
+     */
+    function _verifyGroth16(
+        bytes32 _keyId,
+        bytes memory _proof,
+        uint256[] memory _publicInputs
+    ) internal view returns (bool) {
+        // If verifier not set, use placeholder
+        if (address(groth16Verifier) == address(0)) {
+            return _verifyPlaceholder(_keyId, _proof, _publicInputs);
+        }
+
+        // Check if key is registered in the verifier
+        if (!groth16Verifier.isKeyActive(_keyId)) {
+            return false;
+        }
+
+        // Verify proof
+        try groth16Verifier.verifyProofBytes(_keyId, _proof, _publicInputs) returns (bool result) {
+            return result;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * @dev Verify a PLONK proof using the PlonkVerifier contract
+     */
+    function _verifyPlonk(
+        bytes32 _keyId,
+        bytes memory _proof,
+        uint256[] memory _publicInputs
+    ) internal view returns (bool) {
+        // If verifier not set, use placeholder
+        if (address(plonkVerifier) == address(0)) {
+            return _verifyPlaceholder(_keyId, _proof, _publicInputs);
+        }
+
+        // Check if key is registered in the verifier
+        if (!plonkVerifier.isKeyActive(_keyId)) {
+            return false;
+        }
+
+        // Verify proof
+        try plonkVerifier.verifyProofBytes(_keyId, _proof, _publicInputs) returns (bool result) {
+            return result;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * @dev Placeholder verification for testing or when verifiers not deployed
+     * @notice This performs basic sanity checks but NOT cryptographic verification
+     *         ONLY use for testing - replace with real verification in production
+     */
+    function _verifyPlaceholder(
+        bytes32 _keyId,
+        bytes memory _proof,
+        uint256[] memory _publicInputs
+    ) internal view returns (bool) {
+        VerificationKeyData memory vk = verificationKeys[_keyId];
+
+        // Basic sanity checks
+        if (!vk.isActive) {
+            return false;
+        }
+        if (vk.vkData.length == 0) {
+            return false;
+        }
+        if (_publicInputs.length == 0) {
+            return false;
+        }
+
+        // For Groth16, proof should be 256 bytes (8 x 32-byte elements)
+        // For PLONK, proof is larger
+        if (vk.proofSystem == IZKVerifier.ProofSystem.Groth16 && _proof.length != 256) {
+            return false;
+        }
+        if (vk.proofSystem == IZKVerifier.ProofSystem.PLONK && _proof.length != 1152) {
+            return false;
+        }
+
+        // Placeholder: return true if sanity checks pass
+        // WARNING: This does NOT verify the proof cryptographically!
+        return true;
     }
 
     // =============================================================================

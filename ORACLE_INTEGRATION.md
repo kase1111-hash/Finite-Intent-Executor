@@ -697,18 +697,107 @@ async function deployOracleInfrastructure() {
 | Phase 3 | TrustedIssuerRegistry | ✅ Implemented |
 | Phase 3 | ZKVerifierAdapter | ✅ Implemented |
 | Phase 3 | TriggerMechanism ZK Support | ✅ Implemented |
+| Phase 4 | Circom Circuits | ✅ Implemented |
+| Phase 4 | Groth16Verifier | ✅ Implemented |
+| Phase 4 | PlonkVerifier | ✅ Implemented |
+| Phase 4 | ZKProofGenerator SDK | ✅ Implemented |
+
+---
+
+## ZK Circuits (Phase 4)
+
+### Circom Circuits
+
+**Location:** `circuits/`
+
+Three production circuits for certificate verification:
+
+| Circuit | File | Description |
+|---------|------|-------------|
+| DeathCertificateVerifier | `certificate_verifier.circom` | Verifies death certificates from government issuers |
+| MedicalIncapacitationVerifier | `medical_verifier.circom` | Verifies medical incapacitation certs with expiration |
+| LegalDocumentVerifier | `legal_verifier.circom` | Verifies probate orders and court rulings |
+
+**Circuit Features:**
+- Poseidon hash for efficient ZK operations
+- EdDSA signature verification for issuer authentication
+- Expiration checking for time-sensitive certificates
+- Creator commitment verification for identity binding
+- Certificate type enforcement
+
+**Public Inputs:**
+- `creatorCommitment` - Commitment to creator identity
+- `certificateHash` - Hash of certificate for on-chain reference
+- `currentTimestamp` - Current time for expiration check
+
+**Public Outputs:**
+- `issuerCommitment` - Commitment to issuer public key (for registry verification)
+- `isValid` - Whether certificate is valid and not expired
+
+### On-Chain Verifiers
+
+**Groth16Verifier** (`contracts/verifiers/Groth16Verifier.sol`)
+- BN254 curve operations using EVM precompiles
+- Multiple verification key support
+- Key activation/deactivation
+- ~200k gas base cost + 6k per public input
+
+**PlonkVerifier** (`contracts/verifiers/PlonkVerifier.sol`)
+- KZG polynomial commitment verification
+- Universal setup support
+- Fiat-Shamir challenge computation
+- ~350k gas base cost + 3k per public input
+
+### ZK Proof Generator SDK
+
+**Location:** `scripts/zk/zkProofGenerator.js`
+
+JavaScript library for off-chain proof generation:
+
+```javascript
+const { ZKProofGenerator, CertificateBuilder, CertificateType } = require('./zkProofGenerator');
+
+// Initialize generator
+const generator = await new ZKProofGenerator(wasmPath, zkeyPath, 'groth16').init();
+
+// Build certificate inputs
+const inputs = generator.prepareDeathCertificateInputs({
+    creatorAddress: '0x...',
+    creatorSalt: ZKProofGenerator.generateSalt(),
+    issueDate: Date.now(),
+    expirationDate: 0,
+    claimData: ethers.keccak256(...),
+    issuerPubKeyX: '...',
+    issuerPubKeyY: '...',
+    sigR8X: '...',
+    sigR8Y: '...',
+    sigS: '...',
+    currentTimestamp: Math.floor(Date.now() / 1000)
+});
+
+// Generate proof
+const { proof, publicSignals } = await generator.generateProof(inputs);
+
+// Encode for on-chain submission
+const proofBytes = generator.encodeGroth16ProofAsBytes(proof);
+```
+
+### Building Circuits
+
+```bash
+# Install dependencies
+npm install circomlib snarkjs
+
+# Build all circuits
+./scripts/zk/build_circuits.sh
+
+# Build single circuit
+./scripts/zk/build_circuits.sh death_certificate
+```
 
 ---
 
 ## Future Work
-
-### Phase 4: Production ZK Circuits
-
-- Production ZK circuits for certificate verification (Circom/Noir)
-- On-chain verifier contracts for specific proof systems
-- Off-chain prover services and SDKs
-- Gas optimization for on-chain verification
-- Integration with existing identity protocols (Polygon ID, etc.)
 
 ### Phase 5: Additional Oracle Sources
 

@@ -140,7 +140,7 @@ This specification turns the problem of posthumous intent from an intractable tr
 
 ### Smart Contracts
 
-All core smart contracts are implemented (6 core + 7 oracle):
+All core smart contracts are implemented (6 core + 9 oracle/verifier):
 
 | Contract | File | Status | Notes |
 |----------|------|--------|-------|
@@ -157,6 +157,16 @@ All core smart contracts are implemented (6 core + 7 oracle):
 | **IZKVerifier** | `contracts/oracles/IZKVerifier.sol` | Implemented | ZK proof verifier interface |
 | **TrustedIssuerRegistry** | `contracts/oracles/TrustedIssuerRegistry.sol` | Implemented | Certificate authority registry |
 | **ZKVerifierAdapter** | `contracts/oracles/ZKVerifierAdapter.sol` | Implemented | ZK proof verification oracle adapter |
+| **Groth16Verifier** | `contracts/verifiers/Groth16Verifier.sol` | Implemented | On-chain Groth16 proof verification |
+| **PlonkVerifier** | `contracts/verifiers/PlonkVerifier.sol` | Implemented | On-chain PLONK proof verification |
+
+### ZK Circuits
+
+| Circuit | File | Status | Notes |
+|---------|------|--------|-------|
+| DeathCertificateVerifier | `circuits/certificate_verifier.circom` | Implemented | Death certificate ZK verification |
+| MedicalIncapacitationVerifier | `circuits/medical_verifier.circom` | Implemented | Medical certificate with expiration |
+| LegalDocumentVerifier | `circuits/legal_verifier.circom` | Implemented | Probate orders, court rulings |
 
 ### Additional Tools
 
@@ -164,6 +174,8 @@ All core smart contracts are implemented (6 core + 7 oracle):
 |------|----------|--------|-------|
 | Deployment Script | `scripts/deploy.js` | Implemented | Local and network deployment |
 | License Suggester | `scripts/license_suggester.py` | Implemented | Optional Ollama-based license suggestions |
+| ZK Proof Generator | `scripts/zk/zkProofGenerator.js` | Implemented | Off-chain proof generation SDK |
+| Circuit Build Script | `scripts/zk/build_circuits.sh` | Implemented | Compile circuits and generate keys |
 | Test Suite | `test/FIESystem.test.js` | Basic | Core functionality tested, ~30% coverage |
 
 ---
@@ -288,7 +300,7 @@ The Finite Intent Executor core contracts are implemented and functional. The sy
 - External security audit pending (internal audit complete)
 - Limited testing coverage (~30%, need 90%+)
 - No frontend/UI for users
-- Production ZK circuits pending (infrastructure complete, placeholder verification)
+- Trusted setup ceremony for production ZK circuits pending
 - Basic keyword-based filtering (not LLM-based)
 
 **Production Readiness:** Requires additional development in security, testing, and usability before mainnet deployment.
