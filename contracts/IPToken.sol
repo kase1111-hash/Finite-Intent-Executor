@@ -165,10 +165,7 @@ contract IPToken is ERC721, ERC721URIStorage, AccessControl, ReentrancyGuard {
         RoyaltyInfo memory royaltyInfo = royalties[_tokenId];
         address recipient = royaltyInfo.recipient;
 
-        // Transfer royalty to recipient
-        payable(recipient).transfer(msg.value);
-
-        // Update revenue for active licenses
+        // Update revenue for active licenses FIRST (checks-effects-interactions)
         License[] storage tokenLicenses = licenses[_tokenId];
         for (uint i = 0; i < tokenLicenses.length; i++) {
             if (
@@ -182,6 +179,10 @@ contract IPToken is ERC721, ERC721URIStorage, AccessControl, ReentrancyGuard {
 
         emit RoyaltyPaid(_tokenId, msg.sender, recipient, msg.value);
         emit RevenueCollected(_tokenId, msg.value);
+
+        // Transfer royalty to recipient LAST (external call)
+        (bool success, ) = payable(recipient).call{value: msg.value}("");
+        require(success, "Royalty transfer failed");
     }
 
     /**

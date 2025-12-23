@@ -122,7 +122,7 @@ contract LexiconHolder is AccessControl {
         address _creator,
         string memory _query,
         bytes32 _corpusHash
-    ) external view returns (string memory citation, uint256 confidence) {
+    ) external returns (string memory citation, uint256 confidence) {
         // Verify corpus hash matches
         require(
             corpusRegistry[_creator].corpusHash == _corpusHash,
