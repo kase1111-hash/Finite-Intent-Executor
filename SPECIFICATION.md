@@ -12,6 +12,7 @@ The Finite Intent Executor (FIE) is a modular, blockchain-based system for captu
 - [LICENSE_SUGGESTER.md](LICENSE_SUGGESTER.md) - Optional AI-powered license suggestion tool
 - [SECURITY.md](SECURITY.md) - Security audit findings and best practices
 - [FORMAL_VERIFICATION.md](FORMAL_VERIFICATION.md) - Formal verification specifications and invariants
+- [ORACLE_INTEGRATION.md](ORACLE_INTEGRATION.md) - Oracle infrastructure and verification protocols
 
 ---
 
@@ -30,11 +31,22 @@ Captures assets (tokenized IP, funds, keys, rights), goals, constraints, and a t
 ### Trigger Mechanism
 
 **Trigger Types**:
-- Deadman switch
-- Trusted-signature quorum
-- Verified oracles (e.g., medical/legal events via zero-knowledge proofs)
+- Deadman switch (30+ day inactivity)
+- Trusted-signature quorum (M-of-N signatures)
+- Verified oracles (medical/legal events via OracleRegistry)
 
-**Behavior**: Atomic, irreversible transfer of control upon valid trigger.
+**Oracle Verification Modes**:
+- **Direct Mode**: Legacy - trust registered oracle addresses directly
+- **Registry Mode**: Multi-oracle consensus via OracleRegistry with reputation tracking
+- **ZK Proof Mode**: Zero-knowledge proof verification (infrastructure ready)
+
+**Event Types**:
+- Death certificate verification
+- Medical incapacitation
+- Legal events (probate, court rulings)
+- Custom events
+
+**Behavior**: Atomic, irreversible transfer of control upon valid trigger with 95% confidence threshold.
 
 ### Execution Agent
 
@@ -128,16 +140,19 @@ This specification turns the problem of posthumous intent from an intractable tr
 
 ### Smart Contracts
 
-All six core smart contracts are implemented:
+All core smart contracts are implemented (6 core + 3 oracle):
 
 | Contract | File | Status | Notes |
 |----------|------|--------|-------|
 | **IntentCaptureModule** | `contracts/IntentCaptureModule.sol` | Implemented | Intent capture, goals, revocation, multi-version signing |
-| **TriggerMechanism** | `contracts/TriggerMechanism.sol` | Implemented | Deadman switch, quorum, oracle interface |
+| **TriggerMechanism** | `contracts/TriggerMechanism.sol` | Implemented | Deadman switch, quorum, enhanced oracle integration |
 | **ExecutionAgent** | `contracts/ExecutionAgent.sol` | Implemented | 95% confidence threshold, political filtering, licensing |
 | **LexiconHolder** | `contracts/LexiconHolder.sol` | Implemented | Corpus freezing, semantic indexing, clustering |
 | **SunsetProtocol** | `contracts/SunsetProtocol.sol` | Implemented | 20-year enforcement, public domain transition |
 | **IPToken** | `contracts/IPToken.sol` | Implemented | ERC721, licensing, royalties |
+| **IOracle** | `contracts/oracles/IOracle.sol` | Implemented | Standard oracle interface |
+| **ChainlinkAdapter** | `contracts/oracles/ChainlinkAdapter.sol` | Implemented | Chainlink Any API integration |
+| **OracleRegistry** | `contracts/oracles/OracleRegistry.sol` | Implemented | Multi-oracle consensus and reputation |
 
 ### Additional Tools
 
@@ -176,7 +191,7 @@ All six core smart contracts are implemented:
 
 | Feature | Current State | Gap |
 |---------|---------------|-----|
-| **Oracle Integration** | Interface exists, addresses registered | ZK proof verification stubbed (`TriggerMechanism.sol:197-198`) |
+| **Oracle Integration** | OracleRegistry with multi-oracle consensus, ChainlinkAdapter | ZK proof verification pending, needs Chainlink node setup |
 | **Political Activity Filtering** | Basic keyword matching | Needs LLM-based intent classification |
 | **Semantic Search** | Exact keyword lookup | No vector embeddings or fuzzy matching |
 | **Test Coverage** | Basic unit tests | Missing integration, security, and gas tests |
@@ -192,7 +207,7 @@ All six core smart contracts are implemented:
 | 1 | **External Security Audit** | Internal audit complete, external audit pending | Partial |
 | 2 | **Formal Verification** | Certora specs written, SMTChecker configured, verification pending | Partial |
 | 3 | **Comprehensive Test Suite** | Current coverage ~30%, need 90%+ with fuzzing | Pending |
-| 4 | **Enhanced Oracle Integration** | Chainlink/UMA integration with ZK proof verification | Pending |
+| 4 | **Enhanced Oracle Integration** | OracleRegistry and ChainlinkAdapter implemented; ZK proof verification pending | Partial |
 | 5 | **Frontend/UI** | No user interface, contract interaction via scripts only | Pending |
 
 ### High Priority
@@ -266,10 +281,10 @@ The Finite Intent Executor core contracts are implemented and functional. The sy
 - On-chain audit logging
 
 **Key Gaps:**
-- No security audit or formal verification
-- Limited testing coverage
+- External security audit pending (internal audit complete)
+- Limited testing coverage (~30%, need 90%+)
 - No frontend/UI for users
-- Oracle integration is interface-only
+- Oracle ZK proof verification pending (infrastructure complete)
 - Basic keyword-based filtering (not LLM-based)
 
 **Production Readiness:** Requires additional development in security, testing, and usability before mainnet deployment.

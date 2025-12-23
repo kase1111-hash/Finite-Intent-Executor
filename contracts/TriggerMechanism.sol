@@ -3,6 +3,9 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "./oracles/IOracle.sol";
+import "./oracles/OracleRegistry.sol";
 
 interface IIntentCaptureModule {
     function triggerIntent(address _creator) external;
@@ -24,8 +27,13 @@ interface IIntentCaptureModule {
  * @title TriggerMechanism
  * @dev Implements deadman switch, trusted-signature quorum, and oracle-based triggers
  * Provides atomic, irreversible transfer of control upon valid trigger
+ *
+ * @notice Enhanced oracle integration supports:
+ * - Direct oracle verification (legacy mode)
+ * - OracleRegistry-based multi-oracle consensus
+ * - ZK proof verification (when enabled)
  */
-contract TriggerMechanism is Ownable {
+contract TriggerMechanism is Ownable, ReentrancyGuard {
     using ECDSA for bytes32;
 
     enum TriggerType {
@@ -34,30 +42,75 @@ contract TriggerMechanism is Ownable {
         OracleVerified
     }
 
+    /// @dev Oracle verification mode for enhanced security
+    enum OracleMode {
+        Direct,             // Legacy: trust individual oracle addresses directly
+        Registry,           // Use OracleRegistry for multi-oracle consensus
+        ZKProof             // Require zero-knowledge proof verification
+    }
+
     struct TriggerConfig {
         TriggerType triggerType;
         uint256 deadmanInterval;     // For deadman: seconds of inactivity before trigger
         uint256 lastCheckIn;          // Last time creator checked in
         address[] trustedSigners;     // For quorum: trusted addresses
         uint256 requiredSignatures;   // Number of signatures needed
-        address[] oracles;            // For oracle: verified oracle addresses
+        address[] oracles;            // For oracle: verified oracle addresses (legacy)
         bool isConfigured;
         bool isTriggered;
     }
 
+    /// @dev Extended oracle configuration for enhanced verification
+    struct OracleConfig {
+        OracleMode mode;
+        IOracle.EventType eventType;    // Type of event to verify (death, incapacitation, etc.)
+        bytes32 dataHash;               // Hash of verification data (for privacy)
+        bytes32 aggregationId;          // OracleRegistry aggregation ID (if using Registry mode)
+        uint256 requiredConfidence;     // Minimum confidence score (default: 95)
+        bool useRegistry;               // Whether to use OracleRegistry
+    }
+
     IIntentCaptureModule public intentModule;
+    OracleRegistry public oracleRegistry;
+
     mapping(address => TriggerConfig) public triggers;
+    mapping(address => OracleConfig) public oracleConfigs;
     mapping(address => mapping(address => bool)) public hasSignedTrigger;
     mapping(address => uint256) public signatureCount;
+
+    /// @dev Minimum confidence threshold for oracle verification (matches ExecutionAgent)
+    uint256 public constant MIN_CONFIDENCE_THRESHOLD = 95;
 
     event TriggerConfigured(address indexed creator, TriggerType triggerType);
     event DeadmanCheckIn(address indexed creator, uint256 timestamp);
     event TrustedSignatureReceived(address indexed creator, address indexed signer);
     event OracleProofSubmitted(address indexed creator, address indexed oracle);
     event IntentTriggered(address indexed creator, uint256 timestamp, TriggerType triggerType);
+    event OracleRegistrySet(address indexed oldRegistry, address indexed newRegistry);
+    event OracleVerificationRequested(
+        address indexed creator,
+        bytes32 indexed aggregationId,
+        IOracle.EventType eventType
+    );
+    event OracleVerificationCompleted(
+        address indexed creator,
+        bool isValid,
+        uint256 confidenceScore
+    );
 
     constructor(address _intentModuleAddress) Ownable(msg.sender) {
         intentModule = IIntentCaptureModule(_intentModuleAddress);
+    }
+
+    /**
+     * @dev Set the OracleRegistry contract address
+     * @param _registry Address of the OracleRegistry contract
+     */
+    function setOracleRegistry(address _registry) external onlyOwner {
+        require(_registry != address(0), "Invalid registry address");
+        address oldRegistry = address(oracleRegistry);
+        oracleRegistry = OracleRegistry(_registry);
+        emit OracleRegistrySet(oldRegistry, _registry);
     }
 
     /**
@@ -110,7 +163,7 @@ contract TriggerMechanism is Ownable {
     }
 
     /**
-     * @dev Configures oracle-verified trigger
+     * @dev Configures oracle-verified trigger (legacy direct mode)
      * @param _oracles Array of trusted oracle addresses
      */
     function configureOracleVerified(address[] memory _oracles) external {
@@ -128,7 +181,116 @@ contract TriggerMechanism is Ownable {
             isTriggered: false
         });
 
+        // Set default oracle config for legacy mode
+        oracleConfigs[msg.sender] = OracleConfig({
+            mode: OracleMode.Direct,
+            eventType: IOracle.EventType.Death,
+            dataHash: bytes32(0),
+            aggregationId: bytes32(0),
+            requiredConfidence: MIN_CONFIDENCE_THRESHOLD,
+            useRegistry: false
+        });
+
         emit TriggerConfigured(msg.sender, TriggerType.OracleVerified);
+    }
+
+    /**
+     * @dev Configures enhanced oracle-verified trigger using OracleRegistry
+     * @param _eventType Type of event to verify (Death, Incapacitation, LegalEvent, Custom)
+     * @param _dataHash Hash of verification data (stored off-chain for privacy)
+     * @param _requiredOracles Number of oracles required for consensus (0 = use registry default)
+     */
+    function configureEnhancedOracleVerified(
+        IOracle.EventType _eventType,
+        bytes32 _dataHash,
+        uint256 _requiredOracles
+    ) external {
+        require(address(oracleRegistry) != address(0), "Oracle registry not set");
+        require(!triggers[msg.sender].isTriggered, "Already triggered");
+        require(_dataHash != bytes32(0), "Data hash required");
+
+        triggers[msg.sender] = TriggerConfig({
+            triggerType: TriggerType.OracleVerified,
+            deadmanInterval: 0,
+            lastCheckIn: 0,
+            trustedSigners: new address[](0),
+            requiredSignatures: 0,
+            oracles: new address[](0),
+            isConfigured: true,
+            isTriggered: false
+        });
+
+        oracleConfigs[msg.sender] = OracleConfig({
+            mode: OracleMode.Registry,
+            eventType: _eventType,
+            dataHash: _dataHash,
+            aggregationId: bytes32(0),
+            requiredConfidence: MIN_CONFIDENCE_THRESHOLD,
+            useRegistry: true
+        });
+
+        emit TriggerConfigured(msg.sender, TriggerType.OracleVerified);
+    }
+
+    /**
+     * @dev Request verification through OracleRegistry (for Registry mode)
+     * @param _requiredOracles Number of oracles required (0 = use default)
+     * @return aggregationId The aggregation ID for tracking
+     */
+    function requestOracleVerification(uint256 _requiredOracles)
+        external
+        nonReentrant
+        returns (bytes32 aggregationId)
+    {
+        TriggerConfig storage config = triggers[msg.sender];
+        OracleConfig storage oracleConfig = oracleConfigs[msg.sender];
+
+        require(config.isConfigured, "Trigger not configured");
+        require(config.triggerType == TriggerType.OracleVerified, "Not an oracle trigger");
+        require(!config.isTriggered, "Already triggered");
+        require(oracleConfig.useRegistry, "Not using registry mode");
+        require(oracleConfig.aggregationId == bytes32(0), "Verification already requested");
+
+        aggregationId = oracleRegistry.requestAggregatedVerification(
+            msg.sender,
+            oracleConfig.eventType,
+            oracleConfig.dataHash,
+            _requiredOracles
+        );
+
+        oracleConfig.aggregationId = aggregationId;
+
+        emit OracleVerificationRequested(msg.sender, aggregationId, oracleConfig.eventType);
+
+        return aggregationId;
+    }
+
+    /**
+     * @dev Complete trigger based on OracleRegistry aggregation result
+     * @param _creator Address of the intent creator
+     */
+    function completeOracleVerification(address _creator) external nonReentrant {
+        TriggerConfig storage config = triggers[_creator];
+        OracleConfig storage oracleConfig = oracleConfigs[_creator];
+
+        require(config.isConfigured, "Trigger not configured");
+        require(config.triggerType == TriggerType.OracleVerified, "Not an oracle trigger");
+        require(!config.isTriggered, "Already triggered");
+        require(oracleConfig.useRegistry, "Not using registry mode");
+        require(oracleConfig.aggregationId != bytes32(0), "No verification requested");
+
+        // Check if aggregation is complete and valid
+        bool isValid = oracleRegistry.isAggregationValid(oracleConfig.aggregationId);
+
+        OracleRegistry.AggregatedVerification memory agg =
+            oracleRegistry.getAggregation(oracleConfig.aggregationId);
+
+        emit OracleVerificationCompleted(_creator, isValid, agg.averageConfidence);
+
+        require(isValid, "Oracle verification not valid");
+        require(agg.averageConfidence >= oracleConfig.requiredConfidence, "Confidence too low");
+
+        _executeTrigger(_creator, config);
     }
 
     /**
@@ -247,5 +409,59 @@ contract TriggerMechanism is Ownable {
      */
     function getTriggerConfig(address _creator) external view returns (TriggerConfig memory) {
         return triggers[_creator];
+    }
+
+    /**
+     * @dev Get oracle configuration for a creator
+     */
+    function getOracleConfig(address _creator) external view returns (OracleConfig memory) {
+        return oracleConfigs[_creator];
+    }
+
+    /**
+     * @dev Check if oracle verification is pending
+     */
+    function isVerificationPending(address _creator) external view returns (bool) {
+        OracleConfig memory oracleConfig = oracleConfigs[_creator];
+        if (!oracleConfig.useRegistry || oracleConfig.aggregationId == bytes32(0)) {
+            return false;
+        }
+        OracleRegistry.AggregatedVerification memory agg =
+            oracleRegistry.getAggregation(oracleConfig.aggregationId);
+        return !agg.isComplete;
+    }
+
+    /**
+     * @dev Get verification status for a creator
+     * @return aggregationId The aggregation ID (bytes32(0) if not using registry)
+     * @return isComplete Whether verification is complete
+     * @return isValid Whether verification is valid
+     * @return confidence Average confidence score
+     */
+    function getVerificationStatus(address _creator)
+        external
+        view
+        returns (
+            bytes32 aggregationId,
+            bool isComplete,
+            bool isValid,
+            uint256 confidence
+        )
+    {
+        OracleConfig memory oracleConfig = oracleConfigs[_creator];
+
+        if (!oracleConfig.useRegistry || oracleConfig.aggregationId == bytes32(0)) {
+            return (bytes32(0), false, false, 0);
+        }
+
+        OracleRegistry.AggregatedVerification memory agg =
+            oracleRegistry.getAggregation(oracleConfig.aggregationId);
+
+        return (
+            oracleConfig.aggregationId,
+            agg.isComplete,
+            agg.isValid,
+            agg.averageConfidence
+        );
     }
 }
