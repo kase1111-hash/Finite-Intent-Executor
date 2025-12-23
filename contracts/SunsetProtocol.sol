@@ -15,15 +15,30 @@ interface ILexiconHolder {
 
 /**
  * @title SunsetProtocol
+ * @author Finite Intent Executor
  * @dev Manages mandatory termination after 20 years
  * Halts execution, migrates assets to decentralized storage
  * Transitions IP to public-domain-equivalent licensing
  * Automated clustering for cultural remix and discoverability
+ *
+ * @custom:security-contact security@finiteintent.example
+ *
+ * FORMAL VERIFICATION INVARIANTS:
+ * @custom:invariant SUNSET_DURATION == 20 years (630720000 seconds, immutable)
+ * @custom:invariant Sunset cannot be initiated before 20 years elapsed
+ * @custom:invariant isSunset state can only transition false -> true (irreversible)
+ * @custom:invariant assetsArchived state can only transition false -> true (irreversible)
+ * @custom:invariant ipTransitioned state can only transition false -> true (irreversible)
+ * @custom:invariant Workflow order: sunset -> archive -> transition -> cluster
+ * @custom:invariant Default license type is CC0 (public domain)
+ * @custom:invariant emergencySunset accessible to anyone after 20 years
  */
 contract SunsetProtocol is AccessControl {
     bytes32 public constant SUNSET_OPERATOR_ROLE = keccak256("SUNSET_OPERATOR_ROLE");
 
-    uint256 public constant SUNSET_DURATION = 20 * 365 days; // 20 years, non-configurable
+    /// @notice Mandatory sunset duration (immutable: exactly 20 years)
+    /// @custom:invariant This value MUST always equal 630720000 seconds (20 * 365 days)
+    uint256 public constant SUNSET_DURATION = 20 * 365 days;
 
     enum LicenseType {
         CC0,                    // Creative Commons Zero

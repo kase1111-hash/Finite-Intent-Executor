@@ -10,6 +10,8 @@ The Finite Intent Executor (FIE) is a modular, blockchain-based system for captu
 - [USAGE.md](USAGE.md) - Comprehensive usage guide with examples
 - [REPOSITORY_INTERACTION_DIAGRAM.md](REPOSITORY_INTERACTION_DIAGRAM.md) - System interaction flows
 - [LICENSE_SUGGESTER.md](LICENSE_SUGGESTER.md) - Optional AI-powered license suggestion tool
+- [SECURITY.md](SECURITY.md) - Security audit findings and best practices
+- [FORMAL_VERIFICATION.md](FORMAL_VERIFICATION.md) - Formal verification specifications and invariants
 
 ---
 
@@ -185,13 +187,13 @@ All six core smart contracts are implemented:
 
 ### Critical (Required Before Production)
 
-| # | Feature | Description |
-|---|---------|-------------|
-| 1 | **External Security Audit** | No audit performed on smart contracts |
-| 2 | **Formal Verification** | Critical properties (20-year sunset, 95% confidence) not formally verified |
-| 3 | **Comprehensive Test Suite** | Current coverage ~30%, need 90%+ with fuzzing |
-| 4 | **Enhanced Oracle Integration** | Chainlink/UMA integration with ZK proof verification |
-| 5 | **Frontend/UI** | No user interface, contract interaction via scripts only |
+| # | Feature | Description | Status |
+|---|---------|-------------|--------|
+| 1 | **External Security Audit** | Internal audit complete, external audit pending | Partial |
+| 2 | **Formal Verification** | Certora specs written, SMTChecker configured, verification pending | Partial |
+| 3 | **Comprehensive Test Suite** | Current coverage ~30%, need 90%+ with fuzzing | Pending |
+| 4 | **Enhanced Oracle Integration** | Chainlink/UMA integration with ZK proof verification | Pending |
+| 5 | **Frontend/UI** | No user interface, contract interaction via scripts only | Pending |
 
 ### High Priority
 
