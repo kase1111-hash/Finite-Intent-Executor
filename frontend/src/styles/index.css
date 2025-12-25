@@ -139,3 +139,12 @@
 .sunset-progress-bar {
   @apply absolute inset-y-0 left-0 bg-gradient-to-r from-sunset-400 to-sunset-600 transition-all duration-500;
 }
+
+/* Document Upload Dropzone */
+.upload-dropzone {
+  @apply border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer transition-all duration-200 hover:border-primary-400 hover:bg-primary-50/30;
+}
+
+.upload-dropzone-active {
+  @apply border-primary-500 bg-primary-50 scale-[1.02];
+}
