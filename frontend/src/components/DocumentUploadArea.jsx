@@ -109,7 +109,7 @@ function DocumentUploadArea({ onDocumentImport, targetField = 'intentDocument' }
     }
   }
 
-  const handleDrop = useCallback((e) => {
+  const handleDrop = (e) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragging(false)
@@ -118,7 +118,7 @@ function DocumentUploadArea({ onDocumentImport, targetField = 'intentDocument' }
     if (files && files.length > 0) {
       processFile(files[0])
     }
-  }, [])
+  }
 
   const handleFileSelect = (e) => {
     const files = e.target.files
