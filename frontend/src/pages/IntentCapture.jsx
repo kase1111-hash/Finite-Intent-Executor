@@ -14,8 +14,10 @@ import {
   Hash,
   Calendar,
   Link as LinkIcon,
+  Upload,
 } from 'lucide-react'
 import { format } from 'date-fns'
+import DocumentUploadArea from '../components/DocumentUploadArea'
 
 function IntentCapture() {
   const { account, contracts, isConnected } = useWeb3()
@@ -70,6 +72,12 @@ function IntentCapture() {
 
   const handleFormChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }))
+  }
+
+  const handleDocumentImport = (content, targetField) => {
+    if (targetField === 'intentDocument' || targetField === 'corpusContent') {
+      setForm(prev => ({ ...prev, [targetField]: content }))
+    }
   }
 
   const handleAssetAddressChange = (index, value) => {
@@ -423,6 +431,25 @@ function IntentCapture() {
       </div>
 
       <form onSubmit={handleCaptureIntent} className="space-y-6">
+        {/* Document Import Section */}
+        <div className="card">
+          <div className="card-header">
+            <div className="flex items-center gap-2">
+              <Upload size={20} className="text-primary-600" />
+              <h2 className="font-semibold text-gray-900">Import Documents</h2>
+            </div>
+          </div>
+          <div className="card-body">
+            <p className="text-sm text-gray-600 mb-4">
+              Upload existing documents to auto-populate the intent or corpus fields below.
+            </p>
+            <DocumentUploadArea
+              onDocumentImport={handleDocumentImport}
+              targetField="intentDocument"
+            />
+          </div>
+        </div>
+
         <div className="card">
           <div className="card-header">
             <h2 className="font-semibold text-gray-900">Intent Document</h2>
