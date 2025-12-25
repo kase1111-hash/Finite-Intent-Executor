@@ -1,0 +1,142 @@
+// Contract addresses - update these after deployment
+// These are placeholder addresses for local development
+export const CONTRACT_ADDRESSES = {
+  IntentCaptureModule: import.meta.env.VITE_INTENT_MODULE_ADDRESS || '0x0000000000000000000000000000000000000000',
+  TriggerMechanism: import.meta.env.VITE_TRIGGER_MECHANISM_ADDRESS || '0x0000000000000000000000000000000000000000',
+  ExecutionAgent: import.meta.env.VITE_EXECUTION_AGENT_ADDRESS || '0x0000000000000000000000000000000000000000',
+  LexiconHolder: import.meta.env.VITE_LEXICON_HOLDER_ADDRESS || '0x0000000000000000000000000000000000000000',
+  SunsetProtocol: import.meta.env.VITE_SUNSET_PROTOCOL_ADDRESS || '0x0000000000000000000000000000000000000000',
+  IPToken: import.meta.env.VITE_IP_TOKEN_ADDRESS || '0x0000000000000000000000000000000000000000',
+}
+
+// Simplified ABIs with essential functions
+export const CONTRACT_ABIS = {
+  IntentCaptureModule: [
+    'function captureIntent(bytes32 intentHash, bytes32 corpusHash, string corpusUri, string assetsUri, uint256 corpusStartYear, uint256 corpusEndYear, address[] assets) external',
+    'function addGoal(string description, bytes32 constraintsHash, uint8 priority) external',
+    'function signVersion(uint256 version) external',
+    'function revokeIntent() external',
+    'function getIntent(address creator) external view returns (tuple(bytes32 intentHash, bytes32 corpusHash, string corpusUri, string assetsUri, uint256 corpusStartYear, uint256 corpusEndYear, address[] assets, uint256 version, bool isRevoked, uint256 createdAt, uint256 lastUpdated))',
+    'function getGoals(address creator) external view returns (tuple(string description, bytes32 constraintsHash, uint8 priority, bool isActive)[])',
+    'function getGoalCount(address creator) external view returns (uint256)',
+    'event IntentCaptured(address indexed creator, bytes32 intentHash, uint256 version)',
+    'event GoalAdded(address indexed creator, uint256 goalIndex, string description)',
+    'event IntentRevoked(address indexed creator)',
+  ],
+  TriggerMechanism: [
+    'function configureDeadmanSwitch(uint256 timeout) external',
+    'function configureTrustedQuorum(address[] signers, uint256 requiredSignatures) external',
+    'function configureOracleVerified(address[] oracles) external',
+    'function checkIn() external',
+    'function submitTrustedSignature() external',
+    'function executeDeadmanSwitch(address creator) external',
+    'function executeTrustedQuorum(address creator) external',
+    'function executeOracleVerified(address creator) external',
+    'function getTriggerConfig(address creator) external view returns (tuple(uint8 triggerType, uint256 deadmanTimeout, uint256 lastCheckIn, address[] trustedSigners, uint256 requiredSignatures, address[] oracles, bool isTriggered, uint256 triggeredAt))',
+    'function getSignatureCount(address creator) external view returns (uint256)',
+    'function hasSignerSigned(address creator, address signer) external view returns (bool)',
+    'event DeadmanSwitchConfigured(address indexed creator, uint256 timeout)',
+    'event TrustedQuorumConfigured(address indexed creator, uint256 requiredSignatures)',
+    'event CheckedIn(address indexed creator, uint256 timestamp)',
+    'event TriggerActivated(address indexed creator, uint8 triggerType)',
+  ],
+  ExecutionAgent: [
+    'function activateExecution(address creator) external',
+    'function executeAction(address creator, string actionType, string query, bytes32 corpusHash) external',
+    'function issueLicense(address creator, address licensee, address asset, uint256 royaltyBps, uint256 duration, bytes32 corpusHash) external',
+    'function fundProject(address creator, address projectAddress, uint256 amount, string justification, bytes32 corpusHash) external',
+    'function distributeRevenue(address creator, address[] recipients, uint256[] amounts) external',
+    'function activateSunset(address creator) external',
+    'function getExecutionStatus(address creator) external view returns (tuple(bool isActive, uint256 activatedAt, uint256 actionsExecuted, uint256 licensesIssued, uint256 projectsFunded, uint256 revenueDistributed, bool isSunset))',
+    'function getActionLog(address creator, uint256 index) external view returns (tuple(string actionType, string query, bytes32 corpusHash, uint8 confidence, bool executed, string citation, uint256 timestamp))',
+    'function getActionLogCount(address creator) external view returns (uint256)',
+    'event ExecutionActivated(address indexed creator, uint256 timestamp)',
+    'event ActionExecuted(address indexed creator, string actionType, uint8 confidence)',
+    'event LicenseIssued(address indexed creator, address licensee, address asset)',
+    'event ProjectFunded(address indexed creator, address project, uint256 amount)',
+  ],
+  LexiconHolder: [
+    'function freezeCorpus(address creator, bytes32 corpusHash, string storageUri, uint256 startYear, uint256 endYear) external',
+    'function createSemanticIndex(address creator, string keyword, string[] citations, uint8[] relevanceScores) external',
+    'function resolveAmbiguity(address creator, string query) external view returns (string[] citations, uint8[] scores)',
+    'function createCluster(string name, string description, bytes32[] legacyHashes) external returns (uint256 clusterId)',
+    'function assignLegacyToCluster(address creator, uint256 clusterId) external',
+    'function getCorpus(address creator) external view returns (tuple(bytes32 corpusHash, string storageUri, uint256 startYear, uint256 endYear, bool isFrozen, uint256 frozenAt))',
+    'function getSemanticIndex(address creator, string keyword) external view returns (string[] citations, uint8[] relevanceScores)',
+    'event CorpusFrozen(address indexed creator, bytes32 corpusHash)',
+    'event SemanticIndexCreated(address indexed creator, string keyword)',
+    'event ClusterCreated(uint256 indexed clusterId, string name)',
+  ],
+  SunsetProtocol: [
+    'function initiateSunset(address creator, uint256 triggerTimestamp) external',
+    'function archiveAssets(address creator, address[] assets, string[] archiveUris, bytes32[] archiveHashes) external',
+    'function transitionIP(address creator, uint8 licenseType) external',
+    'function clusterLegacy(address creator, uint256 clusterId) external',
+    'function completeSunset(address creator) external',
+    'function emergencySunset(address creator, uint256 triggerTimestamp) external',
+    'function isSunsetDue(address creator, uint256 triggerTimestamp) external view returns (bool)',
+    'function getSunsetStatus(address creator) external view returns (tuple(bool isInitiated, bool isComplete, uint256 initiatedAt, uint256 completedAt, uint8 phase, uint256 assetsArchived, uint8 licenseType, uint256 clusterId))',
+    'function SUNSET_DURATION() external view returns (uint256)',
+    'event SunsetInitiated(address indexed creator, uint256 timestamp)',
+    'event AssetsArchived(address indexed creator, uint256 count)',
+    'event IPTransitioned(address indexed creator, uint8 licenseType)',
+    'event SunsetCompleted(address indexed creator)',
+  ],
+  IPToken: [
+    'function mintIP(address to, string name, string description, string ipType, bytes32 contentHash, string metadataUri, string license) external returns (uint256)',
+    'function grantLicense(uint256 tokenId, address licensee, uint256 royaltyBps, uint256 duration) external',
+    'function payRoyalty(uint256 tokenId) external payable',
+    'function transitionToPublicDomain(uint256 tokenId) external',
+    'function getIPMetadata(uint256 tokenId) external view returns (tuple(string name, string description, string ipType, bytes32 contentHash, string metadataUri, string license, bool isPublicDomain, uint256 createdAt))',
+    'function getLicense(uint256 tokenId, address licensee) external view returns (tuple(uint256 royaltyBps, uint256 startTime, uint256 endTime, bool isActive))',
+    'function tokenURI(uint256 tokenId) external view returns (string)',
+    'function balanceOf(address owner) external view returns (uint256)',
+    'function ownerOf(uint256 tokenId) external view returns (address)',
+    'function totalSupply() external view returns (uint256)',
+    'event IPMinted(uint256 indexed tokenId, address indexed creator, string name)',
+    'event LicenseGranted(uint256 indexed tokenId, address indexed licensee)',
+    'event RoyaltyPaid(uint256 indexed tokenId, address indexed payer, uint256 amount)',
+    'event TransitionedToPublicDomain(uint256 indexed tokenId)',
+  ],
+}
+
+// Network configurations
+export const NETWORKS = {
+  1: { name: 'Ethereum Mainnet', symbol: 'ETH', explorer: 'https://etherscan.io' },
+  5: { name: 'Goerli Testnet', symbol: 'ETH', explorer: 'https://goerli.etherscan.io' },
+  11155111: { name: 'Sepolia Testnet', symbol: 'ETH', explorer: 'https://sepolia.etherscan.io' },
+  137: { name: 'Polygon', symbol: 'MATIC', explorer: 'https://polygonscan.com' },
+  80001: { name: 'Mumbai Testnet', symbol: 'MATIC', explorer: 'https://mumbai.polygonscan.com' },
+  31337: { name: 'Hardhat Local', symbol: 'ETH', explorer: '' },
+}
+
+// License types for IP tokens
+export const LICENSE_TYPES = {
+  0: 'CC0 (Public Domain)',
+  1: 'CC-BY',
+  2: 'CC-BY-SA',
+  3: 'CC-BY-NC',
+  4: 'CC-BY-NC-SA',
+  5: 'MIT',
+  6: 'Apache 2.0',
+  7: 'GPL',
+  8: 'Custom',
+}
+
+// Trigger types
+export const TRIGGER_TYPES = {
+  0: 'None',
+  1: 'Deadman Switch',
+  2: 'Trusted Quorum',
+  3: 'Oracle Verified',
+}
+
+// Sunset phases
+export const SUNSET_PHASES = {
+  0: 'Not Started',
+  1: 'Initiated',
+  2: 'Assets Archived',
+  3: 'IP Transitioned',
+  4: 'Legacy Clustered',
+  5: 'Completed',
+}
