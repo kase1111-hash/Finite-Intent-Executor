@@ -15,6 +15,32 @@ The Finite Intent Executor (FIE) is a modular, blockchain-based system for captu
 
 ## Quick Start
 
+### Windows (Easy Setup)
+
+**Double-click `setup.bat`** or run in PowerShell:
+
+```powershell
+.\setup.ps1
+```
+
+This will:
+- Check prerequisites (Node.js 18+)
+- Install all dependencies
+- Compile smart contracts
+- Set up the frontend
+
+**After setup, use these helper scripts:**
+
+| Script | Description |
+|--------|-------------|
+| `dev.bat` | Start full development environment (recommended) |
+| `start-node.bat` | Start Hardhat blockchain node |
+| `start-frontend.bat` | Start React frontend dev server |
+| `deploy.bat` | Deploy contracts to local network |
+| `run-tests.bat` | Run smart contract tests |
+
+### Linux/macOS
+
 ```bash
 # Install dependencies
 npm install
@@ -29,6 +55,12 @@ npm test
 npm run node          # Terminal 1
 npm run deploy        # Terminal 2
 ```
+
+### Prerequisites
+
+- **Node.js 18+** - [Download](https://nodejs.org)
+- **Git** (optional) - For version control
+- **Python 3** (optional) - For license suggester tool
 
 ## Features
 
