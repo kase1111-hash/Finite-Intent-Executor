@@ -227,7 +227,7 @@ Focus areas for future audits:
 ### If Vulnerability Discovered
 
 1. **Do not disclose publicly**
-2. Contact: [security contact to be added]
+2. Report via [GitHub Security Advisories](../../security/advisories/new) (preferred) or open a private issue
 3. Provide:
    - Vulnerability description
    - Steps to reproduce
