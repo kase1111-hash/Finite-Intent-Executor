@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useWeb3 } from '../context/Web3Context'
-import { TRIGGER_TYPES, SUNSET_PHASES } from '../contracts/config'
+import { TRIGGER_TYPES } from '../contracts/config'
 import {
   FileText,
   Zap,
@@ -15,7 +15,7 @@ import {
   ArrowRight,
   RefreshCw,
 } from 'lucide-react'
-import { formatDistanceToNow, format, differenceInDays } from 'date-fns'
+import { format, differenceInDays } from 'date-fns'
 
 function StatCard({ icon: Icon, label, value, subValue, color = 'primary', link }) {
   const colorClasses = {
@@ -78,7 +78,7 @@ function Dashboard() {
     tokenCount: 0,
   })
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!isConnected || !account || !contracts.IntentCaptureModule) return
 
     setLoading(true)
@@ -93,7 +93,9 @@ function Dashboard() {
       let tokenCount = 0
       try {
         tokenCount = Number(await contracts.IPToken?.balanceOf(account) || 0)
-      } catch {}
+      } catch {
+        // Token count fetch failed, use default
+      }
 
       setData({ intent, trigger, execution, sunset, tokenCount })
     } catch (err) {
@@ -101,11 +103,11 @@ function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [account, contracts, isConnected])
 
   useEffect(() => {
     fetchData()
-  }, [account, contracts, isConnected])
+  }, [fetchData])
 
   if (!isConnected) {
     return (
@@ -130,7 +132,6 @@ function Dashboard() {
   const triggerType = data.trigger ? TRIGGER_TYPES[data.trigger.triggerType] : 'Not Configured'
   const isTriggered = data.trigger?.isTriggered
   const isExecutionActive = data.execution?.isActive
-  const sunsetPhase = data.sunset ? SUNSET_PHASES[data.sunset.phase] : 'Not Started'
   const isSunset = data.sunset?.isComplete
 
   // Calculate sunset countdown

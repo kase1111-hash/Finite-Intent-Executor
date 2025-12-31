@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useWeb3 } from '../context/Web3Context'
 import { ethers } from 'ethers'
 import toast from 'react-hot-toast'
@@ -39,7 +39,7 @@ function ExecutionMonitor() {
     corpusHash: '',
   })
 
-  const fetchExecutionData = async () => {
+  const fetchExecutionData = useCallback(async () => {
     if (!isConnected || !account || !contracts.ExecutionAgent) return
 
     setLoading(true)
@@ -55,7 +55,9 @@ function ExecutionMonitor() {
         try {
           const log = await contracts.ExecutionAgent.getActionLog(account, i)
           logs.push({ index: i, ...log })
-        } catch {}
+        } catch {
+          // Skip failed log fetch
+        }
       }
 
       setActionLogs(logs.reverse()) // Most recent first
@@ -64,11 +66,11 @@ function ExecutionMonitor() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [account, contracts, isConnected])
 
   useEffect(() => {
     fetchExecutionData()
-  }, [account, contracts, isConnected])
+  }, [fetchExecutionData])
 
   const handleActivateExecution = async () => {
     setSubmitting(true)

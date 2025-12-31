@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useWeb3 } from '../context/Web3Context'
 import { ethers } from 'ethers'
 import toast from 'react-hot-toast'
@@ -39,7 +39,7 @@ function Lexicon() {
     relevanceScores: [90],
   })
 
-  const fetchCorpusData = async () => {
+  const fetchCorpusData = useCallback(async () => {
     if (!isConnected || !account || !contracts.LexiconHolder) return
 
     setLoading(true)
@@ -55,11 +55,11 @@ function Lexicon() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [account, contracts, isConnected])
 
   useEffect(() => {
     fetchCorpusData()
-  }, [account, contracts, isConnected])
+  }, [fetchCorpusData])
 
   const handleFreezeCorpus = async (e) => {
     e.preventDefault()

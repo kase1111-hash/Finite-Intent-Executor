@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useWeb3 } from '../context/Web3Context'
 import { ethers } from 'ethers'
 import toast from 'react-hot-toast'
@@ -43,7 +43,7 @@ function IntentCapture() {
     priority: 50,
   })
 
-  const fetchExistingIntent = async () => {
+  const fetchExistingIntent = useCallback(async () => {
     if (!isConnected || !account || !contracts.IntentCaptureModule) return
 
     setLoading(true)
@@ -55,7 +55,6 @@ function IntentCapture() {
         setExistingIntent(intent)
 
         // Fetch goals
-        const goalCount = await contracts.IntentCaptureModule.getGoalCount(account)
         const fetchedGoals = await contracts.IntentCaptureModule.getGoals(account)
         setGoals(fetchedGoals || [])
       }
@@ -64,11 +63,11 @@ function IntentCapture() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [account, contracts, isConnected])
 
   useEffect(() => {
     fetchExistingIntent()
-  }, [account, contracts, isConnected])
+  }, [fetchExistingIntent])
 
   const handleFormChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }))
