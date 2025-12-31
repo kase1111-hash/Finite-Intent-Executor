@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useWeb3 } from '../context/Web3Context'
-import { SUNSET_PHASES, LICENSE_TYPES } from '../contracts/config'
+import { LICENSE_TYPES } from '../contracts/config'
 import { ethers } from 'ethers'
 import toast from 'react-hot-toast'
 import {
   Sunset,
-  Clock,
   Archive,
   FileText,
   Globe,
@@ -32,7 +31,7 @@ function SunsetStatus() {
     hashes: [''],
   })
 
-  const fetchSunsetData = async () => {
+  const fetchSunsetData = useCallback(async () => {
     if (!isConnected || !account || !contracts.SunsetProtocol) return
 
     setLoading(true)
@@ -59,11 +58,11 @@ function SunsetStatus() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [account, contracts, isConnected])
 
   useEffect(() => {
     fetchSunsetData()
-  }, [account, contracts, isConnected])
+  }, [fetchSunsetData])
 
   const handleInitiateSunset = async () => {
     if (!triggerTimestamp) {
@@ -466,7 +465,7 @@ function SunsetStatus() {
               </div>
               <div className="card-body">
                 <p className="text-gray-600 mb-4">
-                  Anyone can trigger this after 20 years if the owner hasn't.
+                  Anyone can trigger this after 20 years if the owner has not.
                 </p>
                 <button
                   onClick={handleEmergencySunset}

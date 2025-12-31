@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useWeb3 } from '../context/Web3Context'
 import { TRIGGER_TYPES } from '../contracts/config'
 import { ethers } from 'ethers'
@@ -15,7 +15,7 @@ import {
   Trash2,
   Play,
 } from 'lucide-react'
-import { formatDistanceToNow, format, addDays } from 'date-fns'
+import { formatDistanceToNow, format } from 'date-fns'
 
 function TriggerConfig() {
   const { account, contracts, isConnected } = useWeb3()
@@ -31,7 +31,7 @@ function TriggerConfig() {
   const [requiredSignatures, setRequiredSignatures] = useState(2)
   const [oracleAddresses, setOracleAddresses] = useState([''])
 
-  const fetchTriggerConfig = async () => {
+  const fetchTriggerConfig = useCallback(async () => {
     if (!isConnected || !account || !contracts.TriggerMechanism) return
 
     setLoading(true)
@@ -48,11 +48,11 @@ function TriggerConfig() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [account, contracts, isConnected])
 
   useEffect(() => {
     fetchTriggerConfig()
-  }, [account, contracts, isConnected])
+  }, [fetchTriggerConfig])
 
   const handleConfigureDeadman = async (e) => {
     e.preventDefault()
@@ -387,7 +387,7 @@ function TriggerConfig() {
               </div>
               <div className="card-body space-y-4">
                 <p className="text-sm text-gray-600">
-                  If you don't check in within the timeout period, the trigger will activate.
+                  If you do not check in within the timeout period, the trigger will activate.
                   Minimum timeout is 30 days.
                 </p>
                 <div>

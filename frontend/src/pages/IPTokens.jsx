@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useWeb3 } from '../context/Web3Context'
-import { LICENSE_TYPES } from '../contracts/config'
 import { ethers } from 'ethers'
 import toast from 'react-hot-toast'
 import {
@@ -11,13 +10,8 @@ import {
   Music,
   Image,
   RefreshCw,
-  ExternalLink,
   Shield,
-  DollarSign,
-  Clock,
-  CheckCircle,
 } from 'lucide-react'
-import { format } from 'date-fns'
 
 const IP_TYPES = [
   { value: 'article', label: 'Article/Paper', icon: FileText },
@@ -53,14 +47,11 @@ function IPTokens() {
   })
   const [showLicenseForm, setShowLicenseForm] = useState(false)
 
-  const fetchTokens = async () => {
+  const fetchTokens = useCallback(async () => {
     if (!isConnected || !account || !contracts.IPToken) return
 
     setLoading(true)
     try {
-      const balance = await contracts.IPToken.balanceOf(account)
-      const tokenCount = Number(balance)
-
       // For demo purposes, we'll fetch metadata for tokens we might own
       // In production, you'd use events or an indexer
       const tokenList = []
@@ -79,9 +70,13 @@ function IPTokens() {
                 ...metadata,
               })
             }
-          } catch {}
+          } catch {
+            // Skip token if ownership check fails
+          }
         }
-      } catch {}
+      } catch {
+        // Total supply fetch failed
+      }
 
       setTokens(tokenList)
     } catch (err) {
@@ -89,11 +84,11 @@ function IPTokens() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [account, contracts, isConnected])
 
   useEffect(() => {
     fetchTokens()
-  }, [account, contracts, isConnected])
+  }, [fetchTokens])
 
   const handleMint = async (e) => {
     e.preventDefault()
@@ -118,7 +113,7 @@ function IPTokens() {
       )
 
       toast.loading('Minting IP token...', { id: 'mint' })
-      const receipt = await tx.wait()
+      await tx.wait()
       toast.success('IP token minted successfully!', { id: 'mint' })
 
       setShowMintForm(false)
