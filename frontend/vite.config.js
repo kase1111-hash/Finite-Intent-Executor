@@ -9,6 +9,17 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Vendor chunks - split large dependencies
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-ethers': ['ethers'],
+          'vendor-ui': ['lucide-react', 'react-hot-toast'],
+          'vendor-utils': ['date-fns'],
+        }
+      }
+    }
   }
 })
