@@ -336,3 +336,7 @@ All contracts work together to ensure **"Human intent executes faithfully beyond
 - For detailed component design, see [ARCHITECTURE.md](ARCHITECTURE.md)
 - For usage instructions, see [USAGE.md](USAGE.md)
 - For core principles, see [SPECIFICATION.md](SPECIFICATION.md)
+- For oracle infrastructure, see [ORACLE_INTEGRATION.md](ORACLE_INTEGRATION.md)
+- For security details, see [SECURITY.md](SECURITY.md)
+
+*Last Updated: 2026-01-01*

@@ -2,6 +2,8 @@
 
 A React-based web dashboard for interacting with the Finite Intent Executor smart contracts.
 
+*Last Updated: 2026-01-01*
+
 ## Features
 
 - **Dashboard**: Overview of intent status, trigger configuration, and sunset countdown
@@ -14,14 +16,14 @@ A React-based web dashboard for interacting with the Finite Intent Executor smar
 
 ## Tech Stack
 
-- **React 18** - UI framework
-- **Vite** - Build tool
-- **ethers.js v6** - Ethereum interaction
-- **Tailwind CSS** - Styling
-- **React Router** - Navigation
-- **React Hot Toast** - Notifications
-- **Lucide React** - Icons
-- **date-fns** - Date formatting
+- **React 19.0.0** - UI framework
+- **Vite 6.2.0** - Build tool with code splitting
+- **ethers.js 6.16.0** - Ethereum interaction
+- **Tailwind CSS 3.3.6** - Styling
+- **React Router 7.1.0** - Navigation
+- **React Hot Toast 2.6.0** - Notifications
+- **Lucide React 0.462.0** - Icons
+- **date-fns 4.1.0** - Date formatting
 
 ## Quick Start
 
@@ -127,6 +129,8 @@ frontend/
 - [Specification](../SPECIFICATION.md)
 - [Architecture](../ARCHITECTURE.md)
 - [Usage Guide](../USAGE.md)
+- [Oracle Integration](../ORACLE_INTEGRATION.md)
+- [Security](../SECURITY.md)
 
 ## License
 

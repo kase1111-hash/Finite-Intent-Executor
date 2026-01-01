@@ -2,19 +2,24 @@
 
 This guide explains how to use the Finite Intent Executor (FIE) system to capture and execute posthumous intent.
 
+*Last Updated: 2026-01-01*
+
 **Related Documentation**:
 - [README.md](README.md) - Project overview and quick start
 - [SPECIFICATION.md](SPECIFICATION.md) - Core specification and principles
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Technical architecture details
+- [ORACLE_INTEGRATION.md](ORACLE_INTEGRATION.md) - Oracle infrastructure and verification
+- [SECURITY.md](SECURITY.md) - Security audit findings and best practices
 - [REPOSITORY_INTERACTION_DIAGRAM.md](REPOSITORY_INTERACTION_DIAGRAM.md) - System interaction flows
 
 ## Table of Contents
 
 1. [Installation](#installation)
-2. [Deployment](#deployment)
-3. [Core Workflows](#core-workflows)
-4. [Contract Interactions](#contract-interactions)
-5. [Examples](#examples)
+2. [Frontend Dashboard](#frontend-dashboard)
+3. [Deployment](#deployment)
+4. [Core Workflows](#core-workflows)
+5. [Contract Interactions](#contract-interactions)
+6. [Examples](#examples)
 
 ## Installation
 
@@ -32,6 +37,58 @@ npm run compile
 # Run tests
 npm test
 ```
+
+## Frontend Dashboard
+
+The FIE includes a React-based web dashboard for interacting with the smart contracts.
+
+### Quick Start
+
+```bash
+# Navigate to frontend directory
+cd frontend
+
+# Install dependencies
+npm install
+
+# Copy environment file and configure contract addresses
+cp .env.example .env
+
+# Start development server
+npm run dev
+```
+
+### Dashboard Features
+
+| Page | Purpose |
+|------|---------|
+| **Dashboard** | Overview of intent status, trigger configuration, sunset countdown |
+| **Intent Capture** | Create and manage posthumous intent with goals and constraints |
+| **Trigger Configuration** | Set up deadman switch, trusted quorum, or oracle-verified triggers |
+| **IP Token Management** | Mint ERC721 tokens for intellectual property, grant licenses |
+| **Execution Monitor** | Monitor and manage posthumous intent execution |
+| **Sunset Status** | Track the 20-year sunset countdown and public domain transition |
+| **Lexicon Holder** | Freeze corpus and create semantic indices |
+
+### Environment Configuration
+
+Update `frontend/.env` with your deployed contract addresses:
+
+```env
+VITE_INTENT_MODULE_ADDRESS=0x...
+VITE_TRIGGER_MECHANISM_ADDRESS=0x...
+VITE_EXECUTION_AGENT_ADDRESS=0x...
+VITE_LEXICON_HOLDER_ADDRESS=0x...
+VITE_SUNSET_PROTOCOL_ADDRESS=0x...
+VITE_IP_TOKEN_ADDRESS=0x...
+```
+
+### Supported Networks
+
+- Ethereum Mainnet
+- Goerli/Sepolia Testnets
+- Polygon / Mumbai
+- Hardhat Local (localhost:8545)
 
 ## Deployment
 
@@ -430,9 +487,15 @@ For issues and questions:
 - **Documentation**:
   - [SPECIFICATION.md](SPECIFICATION.md) - Core specification
   - [ARCHITECTURE.md](ARCHITECTURE.md) - Technical details
+  - [ORACLE_INTEGRATION.md](ORACLE_INTEGRATION.md) - Oracle infrastructure
+  - [SECURITY.md](SECURITY.md) - Security audit findings
+  - [FORMAL_VERIFICATION.md](FORMAL_VERIFICATION.md) - Verification specs
   - [REPOSITORY_INTERACTION_DIAGRAM.md](REPOSITORY_INTERACTION_DIAGRAM.md) - System flows
 - **Tests**: Run `npm test` to see example usage
+- **Frontend**: See [frontend/README.md](frontend/README.md) for dashboard documentation
 
 ---
 
 For architectural details and system design, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+*Last Updated: 2026-01-01*
