@@ -292,3 +292,5 @@ Before mainnet deployment, engage external auditors to:
 ---
 
 *This security documentation should be updated as vulnerabilities are discovered and fixed.*
+
+*Last Updated: 2026-01-01*

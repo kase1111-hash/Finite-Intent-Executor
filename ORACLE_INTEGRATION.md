@@ -838,4 +838,4 @@ npm install circomlib snarkjs
 
 ---
 
-*Last Updated: 2025-12-23*
+*Last Updated: 2026-01-01*

@@ -2,14 +2,27 @@
 
 ## Overview
 
-The Finite Intent Executor (FIE) is a modular blockchain system consisting of six core smart contracts that work together to enable posthumous intent execution with strict temporal bounds and safeguards.
+The Finite Intent Executor (FIE) is a modular blockchain system consisting of six core smart contracts, six oracle infrastructure contracts, and two ZK verifiers that work together to enable posthumous intent execution with strict temporal bounds and safeguards.
+
+*Last Updated: 2026-01-01*
 
 **Related Documentation**:
 - [SPECIFICATION.md](SPECIFICATION.md) - Core specification and principles
 - [REPOSITORY_INTERACTION_DIAGRAM.md](REPOSITORY_INTERACTION_DIAGRAM.md) - System interaction flows
 - [USAGE.md](USAGE.md) - Practical usage guide
+- [ORACLE_INTEGRATION.md](ORACLE_INTEGRATION.md) - Oracle infrastructure and verification protocols
+- [SECURITY.md](SECURITY.md) - Security audit findings and best practices
+- [FORMAL_VERIFICATION.md](FORMAL_VERIFICATION.md) - Formal verification specifications
 
 ## System Architecture
+
+### Contract Summary
+
+| Category | Contracts | Purpose |
+|----------|-----------|---------|
+| **Core** | 6 contracts | Intent capture, trigger, execution, sunset |
+| **Oracle** | 6 contracts | Multi-oracle consensus, ZK verification |
+| **Verifiers** | 2 contracts | On-chain Groth16/PLONK verification |
 
 ## Contract Overview
 
@@ -598,12 +611,61 @@ TrustedSignatureReceived(creator, signer)
 - Total IP tokens minted
 - Total royalties collected
 
+## Oracle Infrastructure
+
+The system includes a comprehensive oracle infrastructure for trigger verification:
+
+### Oracle Contracts
+
+| Contract | Location | Purpose |
+|----------|----------|---------|
+| **IOracle** | `contracts/oracles/IOracle.sol` | Standard oracle interface |
+| **OracleRegistry** | `contracts/oracles/OracleRegistry.sol` | Multi-oracle consensus with reputation |
+| **ChainlinkAdapter** | `contracts/oracles/ChainlinkAdapter.sol` | Chainlink Any API integration |
+| **UMAAdapter** | `contracts/oracles/UMAAdapter.sol` | UMA Optimistic Oracle integration |
+| **ZKVerifierAdapter** | `contracts/oracles/ZKVerifierAdapter.sol` | ZK proof verification |
+| **TrustedIssuerRegistry** | `contracts/oracles/TrustedIssuerRegistry.sol` | Certificate authority registry |
+
+### ZK Verification Infrastructure
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **Groth16Verifier** | `contracts/verifiers/Groth16Verifier.sol` | On-chain Groth16 verification |
+| **PlonkVerifier** | `contracts/verifiers/PlonkVerifier.sol` | On-chain PLONK verification |
+| **DeathCertificateVerifier** | `circuits/certificate_verifier.circom` | ZK circuit for death certificates |
+| **MedicalVerifier** | `circuits/medical_verifier.circom` | ZK circuit for medical certificates |
+| **LegalVerifier** | `circuits/legal_verifier.circom` | ZK circuit for legal documents |
+
+See [ORACLE_INTEGRATION.md](ORACLE_INTEGRATION.md) for detailed oracle documentation.
+
+## Frontend Dashboard
+
+The React-based dashboard (`frontend/`) provides a complete user interface:
+
+### Technology Stack
+- **React 19.0.0** with React Router 7.1.0
+- **Vite 6.2.0** with code splitting for optimized bundles
+- **ethers.js 6.16.0** for blockchain interaction
+- **Tailwind CSS 3.3.6** for styling
+- **Lucide React** for icons
+
+### Pages
+| Page | Purpose |
+|------|---------|
+| **Dashboard** | Overview of intent status, trigger config, sunset countdown |
+| **IntentCapture** | Create and manage posthumous intent with goals |
+| **TriggerConfig** | Configure deadman switch, quorum, or oracle triggers |
+| **IPTokens** | Mint ERC721 tokens, manage licenses and royalties |
+| **ExecutionMonitor** | Monitor posthumous execution and actions |
+| **SunsetStatus** | Track 20-year countdown and public domain transition |
+| **Lexicon** | Freeze corpus and create semantic indices |
+
 ## Future Enhancements
 
 **Potential Additions** (while maintaining core principles):
 1. Multi-signature execution for high-value actions
 2. Time-weighted priority for goals
-3. Enhanced oracle integration (Chainlink, UMA)
+3. ~~Enhanced oracle integration (Chainlink, UMA)~~ ✅ Implemented
 4. Cross-chain bridges for multi-chain execution
 5. IPFS pinning service integration
 6. Enhanced semantic search (vector embeddings)
@@ -611,7 +673,7 @@ TrustedSignatureReceived(creator, signer)
 8. Revenue streaming (Superfluid integration)
 
 **Non-Negotiable Constraints**:
-- 20-year sunset remains fixed
+- 20-year sunset remains fixed (630,720,000 seconds)
 - No political agency remains enforced
 - 95% confidence threshold maintained
 - Inaction default mode preserved
@@ -620,3 +682,5 @@ TrustedSignatureReceived(creator, signer)
 ---
 
 For implementation examples and usage instructions, see [USAGE.md](USAGE.md).
+
+*Last Updated: 2026-01-01*
