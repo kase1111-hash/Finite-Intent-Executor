@@ -6,8 +6,16 @@
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",
+    "test:gas": "REPORT_GAS=true hardhat test",
+    "test:coverage": "hardhat coverage",
     "deploy": "hardhat run scripts/deploy.js",
+    "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
+    "deploy:mainnet": "hardhat run scripts/deploy.js --network mainnet",
+    "deploy:base": "hardhat run scripts/deploy.js --network base",
     "node": "hardhat node",
+    "verify": "hardhat verify",
+    "size": "REPORT_SIZE=true hardhat compile",
+    "clean": "hardhat clean",
     "suggest-license": "python3 scripts/license_suggester.py"
   },
   "keywords": [
@@ -16,13 +24,21 @@
     "executor",
     "smart-contracts",
     "ip-distribution",
-    "posthumous-intent"
+    "posthumous-intent",
+    "ethereum",
+    "solidity"
   ],
   "author": "",
   "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
-    "hardhat": "^2.22.0"
+    "dotenv": "^16.3.1",
+    "hardhat": "^2.22.0",
+    "hardhat-contract-sizer": "^2.10.0",
+    "hardhat-gas-reporter": "^1.0.10"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^5.4.0"
