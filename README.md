@@ -1,9 +1,11 @@
 # Finite Intent Executor (FIE)
 
+[![Version](https://img.shields.io/badge/Version-0.1.0--alpha-orange.svg)](https://github.com/kase1111-hash/Finite-Intent-Executor/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Solidity](https://img.shields.io/badge/Solidity-0.8.28-blue.svg)](https://soliditylang.org/)
+[![Solidity](https://img.shields.io/badge/Solidity-0.8.20-blue.svg)](https://soliditylang.org/)
 [![Hardhat](https://img.shields.io/badge/Hardhat-2.22.0-yellow.svg)](https://hardhat.org/)
 [![OpenZeppelin](https://img.shields.io/badge/OpenZeppelin-5.4.0-blue.svg)](https://openzeppelin.com/)
+[![Tests](https://img.shields.io/badge/Tests-Passing-green.svg)](./test)
 
 > Blockchain-based posthumous intent execution with strict temporal bounds and safeguards
 
@@ -75,6 +77,8 @@ npm run deploy        # Terminal 2
 - **Semantic Clustering**: Post-sunset grouping for cultural discoverability
 - **No Political Agency**: Hard-coded prohibition on political activities
 - **Full Auditability**: All decisions logged on-chain with corpus citations
+- **Security Integration**: Boundary-SIEM and Boundary-Daemon connectivity for enterprise security
+- **Comprehensive Testing**: Unit, integration, fuzzing, and formal verification support
 - **License Suggester** *(Optional)*: AI-powered tool to suggest appropriate licenses before tokenizing IP
 
 ## Optional Tools
@@ -108,8 +112,10 @@ See **[LICENSE_SUGGESTER.md](LICENSE_SUGGESTER.md)** for detailed setup and usag
 | **[ORACLE_INTEGRATION.md](ORACLE_INTEGRATION.md)** | Oracle infrastructure and verification protocols |
 | **[SECURITY.md](SECURITY.md)** | Security audit findings and best practices |
 | **[FORMAL_VERIFICATION.md](FORMAL_VERIFICATION.md)** | Formal verification specs and critical invariants |
+| **[DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md)** | Production deployment guide with verification steps |
 | **[LICENSE_SUGGESTER.md](LICENSE_SUGGESTER.md)** | Optional AI-powered license suggestion tool |
 | **[REPOSITORY_INTERACTION_DIAGRAM.md](REPOSITORY_INTERACTION_DIAGRAM.md)** | System interaction flows and diagrams |
+| **[CHANGELOG.md](CHANGELOG.md)** | Version history and release notes |
 | **[Frontend README](frontend/README.md)** | React dashboard documentation |
 
 ## Smart Contracts
@@ -136,12 +142,54 @@ See **[LICENSE_SUGGESTER.md](LICENSE_SUGGESTER.md)** for detailed setup and usag
 | **ZKVerifierAdapter** | Zero-knowledge proof verification |
 | **TrustedIssuerRegistry** | Certificate authority registry for ZK verification |
 
+### Libraries (2)
+
+| Contract | Purpose |
+|----------|---------|
+| **ErrorHandler** | Standardized error codes and SIEM-compatible event formatting |
+| **PoliticalFilter** | Multi-layer political content detection and filtering |
+
 ### Verifiers (2)
 
 | Contract | Purpose |
 |----------|---------|
 | **Groth16Verifier** | On-chain Groth16 proof verification |
 | **PlonkVerifier** | On-chain PLONK proof verification |
+
+## Security Integration
+
+FIE integrates with enterprise security infrastructure:
+
+### Boundary-SIEM Integration
+- Real-time event reporting via REST API, CEF, UDP/TCP
+- Standardized error codes aligned with SIEM schema
+- Severity levels (1-10) for alert prioritization
+- Automatic batching and retry with exponential backoff
+
+### Boundary-Daemon Protection
+- Connection protection via RecallGate, ToolGate, MessageGate
+- Policy enforcement with fail-closed semantics
+- RPC connection protection for blockchain interactions
+- Boundary modes: OPEN, RESTRICTED, TRUSTED, AIRGAP, COLDROOM, LOCKDOWN
+
+### Usage
+```javascript
+const { createFIESecurity } = require('./security');
+
+// Create security integration
+const security = createFIESecurity({
+  siemUrl: 'http://boundary-siem:8080',
+  daemonSocket: '/var/run/boundary-daemon/daemon.sock'
+});
+
+// Apply middleware to Express app
+security.applyTo(app);
+
+// Connect to services
+await security.connect();
+```
+
+See `security/` directory for full implementation.
 
 ## Architecture
 
@@ -213,14 +261,45 @@ See [SECURITY.md](SECURITY.md) for detailed audit findings and [ARCHITECTURE.md]
 - **ethers.js 6.16.0** - Ethereum interaction
 - **Tailwind CSS 3.3.6** - Styling
 
-### Verification Infrastructure
-- **Circom** - Zero-knowledge circuits
+### Testing & Verification
+- **Hardhat Test** - Unit and integration tests
+- **Foundry** - Fuzzing tests with invariant checking
 - **Certora Prover** - Formal verification
 - **SMTChecker** - Built-in Solidity verification
+- **Circom** - Zero-knowledge circuits
+
+### Security Integration
+- **Boundary-SIEM** - Security event reporting
+- **Boundary-Daemon** - Connection protection
 
 ### Optional Tools
 - **Ollama** - Local AI for license suggestions
 - **Python 3** - License suggester script
+
+## Testing
+
+Run the comprehensive test suite:
+
+```bash
+# Unit and integration tests
+npm test
+
+# Gas benchmarking
+npx hardhat test test/GasBenchmark.test.js
+
+# Fuzzing tests (requires Foundry)
+forge test --fuzz-runs 1000
+
+# Formal verification (requires Certora)
+./certora/run_verification.sh
+```
+
+### Test Coverage
+- **9 test files** covering all core contracts
+- **Unit tests** for individual contract functions
+- **Integration tests** for complete workflows
+- **Gas benchmarks** for cost optimization
+- **Fuzzing tests** for edge case discovery
 
 ## Contributing
 
@@ -238,4 +317,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-*Last Updated: 2026-01-01*
+**Version:** 0.1.0-alpha | **Last Updated:** 2026-01-02
