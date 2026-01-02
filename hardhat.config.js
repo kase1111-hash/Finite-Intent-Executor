@@ -15,15 +15,38 @@ require("dotenv").config();
  */
 
 // Validate critical environment variables for non-local deployments
-const PRIVATE_KEY = process.env.PRIVATE_KEY || "0x0000000000000000000000000000000000000000000000000000000000000001";
+// WARNING: Never use default/test keys for real deployments
+const PRIVATE_KEY = process.env.PRIVATE_KEY;
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
 
-// RPC endpoints with fallbacks
-const MAINNET_RPC_URL = process.env.MAINNET_RPC_URL || "https://eth-mainnet.g.alchemy.com/v2/your-api-key";
-const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || "https://eth-sepolia.g.alchemy.com/v2/your-api-key";
-const GOERLI_RPC_URL = process.env.GOERLI_RPC_URL || "https://eth-goerli.g.alchemy.com/v2/your-api-key";
+// Validate private key for non-local networks
+function getPrivateKey() {
+  if (!PRIVATE_KEY) {
+    // Only allow missing key for local networks
+    console.warn("⚠️  WARNING: PRIVATE_KEY not set. Only local networks available.");
+    return "0x0000000000000000000000000000000000000000000000000000000000000001"; // Dummy for hardhat
+  }
+  // Reject obviously invalid keys
+  if (PRIVATE_KEY.match(/^0x0{60,}[0-9a-f]{1,4}$/i)) {
+    throw new Error("CRITICAL: Invalid PRIVATE_KEY detected. Do not use test/zero keys for deployment.");
+  }
+  return PRIVATE_KEY;
+}
+
+// RPC endpoints - require explicit configuration for production networks
+const MAINNET_RPC_URL = process.env.MAINNET_RPC_URL;
+const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL;
+const GOERLI_RPC_URL = process.env.GOERLI_RPC_URL;
 const BASE_RPC_URL = process.env.BASE_RPC_URL || "https://mainnet.base.org";
 const BASE_SEPOLIA_RPC_URL = process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org";
+
+// Validate RPC URL before use
+function requireRpcUrl(url, network) {
+  if (!url || url.includes("your-api-key")) {
+    throw new Error(`${network}_RPC_URL not configured. Set it in .env file.`);
+  }
+  return url;
+}
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -75,27 +98,27 @@ module.exports = {
 
     // Ethereum Testnets
     sepolia: {
-      url: SEPOLIA_RPC_URL,
+      url: SEPOLIA_RPC_URL || "https://rpc.sepolia.org",
       chainId: 11155111,
-      accounts: [PRIVATE_KEY],
+      accounts: PRIVATE_KEY ? [getPrivateKey()] : [],
       gasPrice: "auto",
       gas: "auto",
       timeout: 60000
     },
     goerli: {
-      url: GOERLI_RPC_URL,
+      url: GOERLI_RPC_URL || "https://rpc.goerli.org",
       chainId: 5,
-      accounts: [PRIVATE_KEY],
+      accounts: PRIVATE_KEY ? [getPrivateKey()] : [],
       gasPrice: "auto",
       gas: "auto",
       timeout: 60000
     },
 
-    // Ethereum Mainnet
+    // Ethereum Mainnet - Requires explicit configuration
     mainnet: {
-      url: MAINNET_RPC_URL,
+      url: MAINNET_RPC_URL || "",
       chainId: 1,
-      accounts: [PRIVATE_KEY],
+      accounts: PRIVATE_KEY ? [getPrivateKey()] : [],
       gasPrice: "auto",
       gas: "auto",
       timeout: 120000,
@@ -107,14 +130,14 @@ module.exports = {
     base: {
       url: BASE_RPC_URL,
       chainId: 8453,
-      accounts: [PRIVATE_KEY],
+      accounts: PRIVATE_KEY ? [getPrivateKey()] : [],
       gasPrice: "auto",
       gas: "auto"
     },
     baseSepolia: {
       url: BASE_SEPOLIA_RPC_URL,
       chainId: 84532,
-      accounts: [PRIVATE_KEY],
+      accounts: PRIVATE_KEY ? [getPrivateKey()] : [],
       gasPrice: "auto",
       gas: "auto"
     }
