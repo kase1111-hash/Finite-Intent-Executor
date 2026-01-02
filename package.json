@@ -1,6 +1,6 @@
 {
   "name": "finite-intent-executor",
-  "version": "1.0.0",
+  "version": "0.1.0-alpha",
   "description": "A blockchain-based system for capturing and executing posthumous intent with strict bounds on duration, scope, and agency",
   "main": "index.js",
   "scripts": {
