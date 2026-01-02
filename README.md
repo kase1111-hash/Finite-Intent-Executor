@@ -104,18 +104,36 @@ See **[LICENSE_SUGGESTER.md](LICENSE_SUGGESTER.md)** for detailed setup and usag
 
 ## Documentation
 
+### Core Documentation
+
 | Document | Description |
 |----------|-------------|
 | **[SPECIFICATION.md](SPECIFICATION.md)** | Core specification v1.1 with implementation status |
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | Technical architecture and design details |
 | **[USAGE.md](USAGE.md)** | Comprehensive usage guide with examples |
+
+### Technical Guides
+
+| Document | Description |
+|----------|-------------|
 | **[ORACLE_INTEGRATION.md](ORACLE_INTEGRATION.md)** | Oracle infrastructure and verification protocols |
-| **[SECURITY.md](SECURITY.md)** | Security audit findings and best practices |
 | **[FORMAL_VERIFICATION.md](FORMAL_VERIFICATION.md)** | Formal verification specs and critical invariants |
-| **[DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md)** | Production deployment guide with verification steps |
-| **[LICENSE_SUGGESTER.md](LICENSE_SUGGESTER.md)** | Optional AI-powered license suggestion tool |
 | **[REPOSITORY_INTERACTION_DIAGRAM.md](REPOSITORY_INTERACTION_DIAGRAM.md)** | System interaction flows and diagrams |
+
+### Operations & Deployment
+
+| Document | Description |
+|----------|-------------|
+| **[DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md)** | Pre-deployment verification checklist |
+| **[OPERATIONS.md](OPERATIONS.md)** | Operations runbook: deployment, monitoring, troubleshooting |
+| **[SECURITY.md](SECURITY.md)** | Security audit findings and best practices |
+
+### Reference
+
+| Document | Description |
+|----------|-------------|
 | **[CHANGELOG.md](CHANGELOG.md)** | Version history and release notes |
+| **[LICENSE_SUGGESTER.md](LICENSE_SUGGESTER.md)** | Optional AI-powered license suggestion tool |
 | **[Frontend README](frontend/README.md)** | React dashboard documentation |
 
 ## Smart Contracts
