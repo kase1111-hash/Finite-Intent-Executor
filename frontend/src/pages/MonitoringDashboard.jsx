@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useWeb3Context } from '../context/Web3Context';
 import {
   Activity,
@@ -13,7 +13,16 @@ import {
   Filter,
   Download,
   Bell,
-  XCircle
+  XCircle,
+  Lock,
+  Unlock,
+  Server,
+  Database,
+  ShieldCheck,
+  ShieldAlert,
+  Radio,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 
 /**
@@ -57,6 +66,26 @@ const MonitoringDashboard = () => {
 
   // Alert state
   const [alerts, setAlerts] = useState([]);
+
+  // Security integration state
+  const [securityStatus, setSecurityStatus] = useState({
+    siemConnected: false,
+    daemonConnected: false,
+    lastHealthCheck: null,
+    protectionEnabled: true,
+    failClosed: true
+  });
+
+  const [securityStats, setSecurityStats] = useState({
+    eventsReported: 0,
+    protectionChecks: 0,
+    deniedActions: 0,
+    policyViolations: 0,
+    politicalBlocks: 0
+  });
+
+  const [securityAlerts, setSecurityAlerts] = useState([]);
+  const securityClientRef = useRef(null);
 
   // Event type definitions
   const eventTypes = {
@@ -205,6 +234,162 @@ const MonitoringDashboard = () => {
     };
   }, [contracts, provider, formatEvent]);
 
+  // Initialize security integration
+  const initializeSecurity = useCallback(async () => {
+    try {
+      // Dynamic import for security client (works with webpack code splitting)
+      const securityConfig = {
+        siem: {
+          apiUrl: process.env.REACT_APP_BOUNDARY_SIEM_URL || 'http://localhost:8080',
+          apiKey: process.env.REACT_APP_BOUNDARY_SIEM_API_KEY,
+          transport: 'rest'
+        },
+        daemon: {
+          host: process.env.REACT_APP_BOUNDARY_DAEMON_HOST || 'localhost',
+          port: parseInt(process.env.REACT_APP_BOUNDARY_DAEMON_PORT || '9999')
+        },
+        enabled: process.env.REACT_APP_SECURITY_ENABLED !== 'false'
+      };
+
+      // Attempt to connect to security services
+      const healthResponse = await fetch(`${securityConfig.siem.apiUrl}/health`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      }).catch(() => null);
+
+      if (healthResponse?.ok) {
+        setSecurityStatus(prev => ({
+          ...prev,
+          siemConnected: true,
+          lastHealthCheck: new Date()
+        }));
+      }
+
+      // Check daemon connection
+      const daemonHealth = await fetch(
+        `http://${securityConfig.daemon.host}:${securityConfig.daemon.port}/health`,
+        { method: 'GET', headers: { 'Accept': 'application/json' } }
+      ).catch(() => null);
+
+      if (daemonHealth?.ok) {
+        setSecurityStatus(prev => ({
+          ...prev,
+          daemonConnected: true,
+          lastHealthCheck: new Date()
+        }));
+      }
+
+      securityClientRef.current = securityConfig;
+    } catch (err) {
+      console.warn('Security integration initialization failed:', err);
+    }
+  }, []);
+
+  // Report event to SIEM
+  const reportToSIEM = useCallback(async (event) => {
+    if (!securityStatus.siemConnected || !securityClientRef.current) return;
+
+    try {
+      const siemConfig = securityClientRef.current.siem;
+      await fetch(`${siemConfig.apiUrl}/api/v1/events`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': siemConfig.apiKey ? `Bearer ${siemConfig.apiKey}` : ''
+        },
+        body: JSON.stringify({
+          source: 'FIE-Dashboard',
+          timestamp: new Date().toISOString(),
+          severity: event.severity === 'critical' ? 8 : event.severity === 'warning' ? 4 : 2,
+          category: event.contract,
+          action: event.type,
+          data: {
+            blockNumber: event.blockNumber,
+            transactionHash: event.transactionHash,
+            args: event.args
+          }
+        })
+      });
+
+      setSecurityStats(prev => ({
+        ...prev,
+        eventsReported: prev.eventsReported + 1
+      }));
+    } catch (err) {
+      console.warn('Failed to report to SIEM:', err);
+    }
+  }, [securityStatus.siemConnected]);
+
+  // Check action with daemon protection
+  const checkWithDaemon = useCallback(async (action, context) => {
+    if (!securityStatus.daemonConnected || !securityClientRef.current) {
+      return { allowed: !securityStatus.failClosed, reason: 'daemon_unavailable' };
+    }
+
+    try {
+      const daemonConfig = securityClientRef.current.daemon;
+      const response = await fetch(
+        `http://${daemonConfig.host}:${daemonConfig.port}/api/v1/gate/tool`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tool_name: action,
+            parameters: context,
+            context: { source: 'FIE-Dashboard' }
+          })
+        }
+      );
+
+      const result = await response.json();
+      setSecurityStats(prev => ({
+        ...prev,
+        protectionChecks: prev.protectionChecks + 1,
+        deniedActions: result.allowed ? prev.deniedActions : prev.deniedActions + 1
+      }));
+
+      if (!result.allowed) {
+        setSecurityAlerts(prev => [{
+          id: Date.now(),
+          type: 'policy',
+          message: `Action denied by daemon: ${action} - ${result.reason}`,
+          timestamp: new Date()
+        }, ...prev].slice(0, 50));
+      }
+
+      return result;
+    } catch (err) {
+      console.warn('Failed to check with daemon:', err);
+      return { allowed: !securityStatus.failClosed, reason: 'check_failed' };
+    }
+  }, [securityStatus.daemonConnected, securityStatus.failClosed]);
+
+  // Initialize security on mount
+  useEffect(() => {
+    initializeSecurity();
+
+    // Periodic health check
+    const healthInterval = setInterval(() => {
+      initializeSecurity();
+    }, 30000); // Every 30 seconds
+
+    return () => clearInterval(healthInterval);
+  }, [initializeSecurity]);
+
+  // Report significant events to SIEM
+  useEffect(() => {
+    const significantEvents = events.filter(e =>
+      e.severity === 'critical' || e.severity === 'warning'
+    ).slice(0, 10);
+
+    significantEvents.forEach(event => {
+      if (!event.reportedToSIEM) {
+        reportToSIEM(event);
+        event.reportedToSIEM = true;
+      }
+    });
+  }, [events, reportToSIEM]);
+
   // Apply filters
   useEffect(() => {
     let filtered = [...events];
@@ -331,6 +516,129 @@ const MonitoringDashboard = () => {
                   className="text-gray-400 hover:text-white"
                 >
                   <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Security Status Panel */}
+        <div className="bg-gray-800 rounded-lg p-4 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-blue-500" />
+              Security Integration Status
+            </h2>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setSecurityStatus(s => ({ ...s, protectionEnabled: !s.protectionEnabled }))}
+                className={`flex items-center gap-2 px-3 py-1 rounded text-sm ${
+                  securityStatus.protectionEnabled ? 'bg-green-600' : 'bg-gray-600'
+                }`}
+              >
+                {securityStatus.protectionEnabled ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                Protection {securityStatus.protectionEnabled ? 'ON' : 'OFF'}
+              </button>
+              <button
+                onClick={initializeSecurity}
+                className="flex items-center gap-2 px-3 py-1 bg-gray-700 rounded text-sm hover:bg-gray-600"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* SIEM Connection */}
+            <div className={`flex items-center gap-3 p-3 rounded-lg ${
+              securityStatus.siemConnected ? 'bg-green-900/30 border border-green-700' : 'bg-red-900/30 border border-red-700'
+            }`}>
+              <Database className={`w-6 h-6 ${securityStatus.siemConnected ? 'text-green-500' : 'text-red-500'}`} />
+              <div>
+                <div className="text-sm font-medium">Boundary-SIEM</div>
+                <div className={`text-xs ${securityStatus.siemConnected ? 'text-green-400' : 'text-red-400'}`}>
+                  {securityStatus.siemConnected ? 'Connected' : 'Disconnected'}
+                </div>
+              </div>
+              {securityStatus.siemConnected ?
+                <Wifi className="w-4 h-4 text-green-500 ml-auto" /> :
+                <WifiOff className="w-4 h-4 text-red-500 ml-auto" />
+              }
+            </div>
+
+            {/* Daemon Connection */}
+            <div className={`flex items-center gap-3 p-3 rounded-lg ${
+              securityStatus.daemonConnected ? 'bg-green-900/30 border border-green-700' : 'bg-red-900/30 border border-red-700'
+            }`}>
+              <Server className={`w-6 h-6 ${securityStatus.daemonConnected ? 'text-green-500' : 'text-red-500'}`} />
+              <div>
+                <div className="text-sm font-medium">Boundary-Daemon</div>
+                <div className={`text-xs ${securityStatus.daemonConnected ? 'text-green-400' : 'text-red-400'}`}>
+                  {securityStatus.daemonConnected ? 'Connected' : 'Disconnected'}
+                </div>
+              </div>
+              {securityStatus.daemonConnected ?
+                <ShieldCheck className="w-4 h-4 text-green-500 ml-auto" /> :
+                <ShieldAlert className="w-4 h-4 text-red-500 ml-auto" />
+              }
+            </div>
+
+            {/* Events Reported */}
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-900/30 border border-blue-700">
+              <Radio className="w-6 h-6 text-blue-500" />
+              <div>
+                <div className="text-sm font-medium">Events Reported</div>
+                <div className="text-lg font-bold text-blue-400">{securityStats.eventsReported}</div>
+              </div>
+            </div>
+
+            {/* Protection Stats */}
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-purple-900/30 border border-purple-700">
+              <Shield className="w-6 h-6 text-purple-500" />
+              <div>
+                <div className="text-sm font-medium">Protection Checks</div>
+                <div className="text-lg font-bold text-purple-400">
+                  {securityStats.protectionChecks}
+                  {securityStats.deniedActions > 0 && (
+                    <span className="text-sm text-red-400 ml-2">({securityStats.deniedActions} denied)</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {securityStatus.lastHealthCheck && (
+            <div className="mt-3 text-xs text-gray-500 text-right">
+              Last health check: {securityStatus.lastHealthCheck.toLocaleTimeString()}
+            </div>
+          )}
+        </div>
+
+        {/* Security Alerts */}
+        {securityAlerts.length > 0 && (
+          <div className="mb-6 space-y-2">
+            <h3 className="text-sm font-semibold text-gray-400 mb-2 flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4" />
+              Security Alerts
+            </h3>
+            {securityAlerts.slice(0, 5).map(alert => (
+              <div
+                key={alert.id}
+                className="flex items-center justify-between p-3 rounded-lg bg-orange-900/50 border border-orange-500"
+              >
+                <div className="flex items-center gap-3">
+                  <Lock className="w-4 h-4 text-orange-500" />
+                  <span className="text-sm">{alert.message}</span>
+                  <span className="text-xs text-gray-400">
+                    {alert.timestamp.toLocaleTimeString()}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setSecurityAlerts(prev => prev.filter(a => a.id !== alert.id))}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <XCircle className="w-4 h-4" />
                 </button>
               </div>
             ))}
