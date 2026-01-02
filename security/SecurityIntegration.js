@@ -450,11 +450,76 @@ class SecurityIntegration extends EventEmitter {
   }
 
   /**
+   * Validate RPC URL to prevent SSRF attacks
+   * @private
+   */
+  _validateRpcUrl(rpcUrl) {
+    try {
+      const url = new URL(rpcUrl);
+
+      // Block internal/private network addresses
+      const blockedHosts = [
+        'localhost',
+        '127.0.0.1',
+        '0.0.0.0',
+        '::1',
+        'internal',
+        'local'
+      ];
+
+      // Check for blocked hosts
+      const hostname = url.hostname.toLowerCase();
+      if (blockedHosts.some(blocked => hostname === blocked || hostname.endsWith('.' + blocked))) {
+        throw new Error('Internal network addresses are not allowed');
+      }
+
+      // Block private IP ranges
+      const ipMatch = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+      if (ipMatch) {
+        const [, a, b, c, d] = ipMatch.map(Number);
+        // 10.x.x.x, 172.16-31.x.x, 192.168.x.x, 169.254.x.x
+        if (a === 10 ||
+            (a === 172 && b >= 16 && b <= 31) ||
+            (a === 192 && b === 168) ||
+            (a === 169 && b === 254)) {
+          throw new Error('Private network IP addresses are not allowed');
+        }
+      }
+
+      // Only allow http/https protocols
+      if (!['http:', 'https:'].includes(url.protocol)) {
+        throw new Error('Only HTTP/HTTPS protocols are allowed');
+      }
+
+      return true;
+    } catch (err) {
+      if (err.message.includes('Invalid URL')) {
+        throw new Error('Invalid RPC URL format');
+      }
+      throw err;
+    }
+  }
+
+  /**
    * Create a protected RPC connection
    */
   async createProtectedConnection(rpcUrl, options = {}) {
     if (!this.daemonClient) {
       return { protected: false, reason: 'no_daemon' };
+    }
+
+    // Validate URL to prevent SSRF
+    try {
+      this._validateRpcUrl(rpcUrl);
+    } catch (err) {
+      await this.reportEvent({
+        category: SecurityCategory.CONNECTION,
+        action: 'rpc_connection_blocked',
+        severity: SecuritySeverity.WARNING,
+        rpcUrl: rpcUrl.substring(0, 100), // Truncate for safety
+        reason: err.message
+      });
+      return { protected: false, reason: err.message };
     }
 
     const result = await this.daemonClient.protectRPCConnection(rpcUrl, options);
