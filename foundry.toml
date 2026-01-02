@@ -1,0 +1,50 @@
+[profile.default]
+src = "contracts"
+out = "foundry-out"
+libs = ["node_modules"]
+test = "foundry-tests/test"
+
+# Solidity settings
+solc = "0.8.28"
+optimizer = true
+optimizer_runs = 200
+evm_version = "paris"
+
+# Fuzz testing settings
+[fuzz]
+runs = 1000
+max_test_rejects = 65536
+seed = '0x3e8'
+dictionary_weight = 40
+include_storage = true
+include_push_bytes = true
+
+# Invariant testing settings
+[invariant]
+runs = 256
+depth = 15
+fail_on_revert = false
+call_override = false
+dictionary_weight = 80
+include_storage = true
+include_push_bytes = true
+shrink_run_limit = 5000
+
+# Contract remappings
+remappings = [
+    "@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/",
+]
+
+# Coverage
+[profile.coverage]
+fuzz.runs = 500
+
+# CI profile with more runs
+[profile.ci]
+fuzz.runs = 5000
+invariant.runs = 512
+
+# Gas reporting
+[profile.gas]
+gas_reports = ["*"]
+gas_reports_ignore = []
