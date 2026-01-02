@@ -1,5 +1,7 @@
 node_modules
 .env
+.env.local
+.env.*.local
 coverage
 coverage.json
 typechain
@@ -8,6 +10,14 @@ typechain-types
 # Hardhat files
 cache
 artifacts
+
+# Deployment outputs
+deployment-addresses.json
+deployments/
+
+# Test outputs
+test-results/
+gas-report.txt
 
 # IDE
 .idea
@@ -18,7 +28,13 @@ artifacts
 
 # OS
 .DS_Store
+Thumbs.db
 
 # Build output
 dist
 frontend/dist
+frontend/node_modules
+
+# Logs
+*.log
+npm-debug.log*
