@@ -29,7 +29,7 @@
     "solidity"
   ],
   "author": "",
-  "license": "MIT",
+  "license": "CC0-1.0",
   "engines": {
     "node": ">=18.0.0"
   },
