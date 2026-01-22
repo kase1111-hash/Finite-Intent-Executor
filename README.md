@@ -1,7 +1,7 @@
 # Finite Intent Executor (FIE)
 
 [![Version](https://img.shields.io/badge/Version-0.1.0--alpha-orange.svg)](https://github.com/kase1111-hash/Finite-Intent-Executor/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: CC0-1.0](https://img.shields.io/badge/License-CC0_1.0-lightgrey.svg)](https://creativecommons.org/publicdomain/zero/1.0/)
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.20-blue.svg)](https://soliditylang.org/)
 [![Hardhat](https://img.shields.io/badge/Hardhat-2.22.0-yellow.svg)](https://hardhat.org/)
 [![OpenZeppelin](https://img.shields.io/badge/OpenZeppelin-5.4.0-blue.svg)](https://openzeppelin.com/)
@@ -330,7 +330,9 @@ forge test --fuzz-runs 1000
 
 ## Contributing
 
-Contributions are welcome! Please:
+Contributions are welcome! Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+
+**Quick Start:**
 
 1. Fork the repository
 2. Create a feature branch
@@ -338,9 +340,11 @@ Contributions are welcome! Please:
 4. Ensure all tests pass (`npm test`)
 5. Submit a pull request
 
+See the [Contributing Guide](CONTRIBUTING.md) for coding standards, testing requirements, and security considerations.
+
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is dedicated to the public domain under the CC0 1.0 Universal license - see the [LICENSE](LICENSE) file for details. All code is contributed to the public domain, aligning with FIE's core principle that all assets transition to public domain after the 20-year sunset period.
 
 ## Part of the NatLangChain Ecosystem
 
