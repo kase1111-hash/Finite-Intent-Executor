@@ -18,6 +18,12 @@ contract IPToken is ERC721, ERC721URIStorage, AccessControl, ReentrancyGuard {
     /// @notice Maximum number of licenses per token to prevent DoS in loops
     uint256 public constant MAX_LICENSES_PER_TOKEN = 100;
 
+    /// @notice Minimum license duration (1 day)
+    uint256 public constant MIN_LICENSE_DURATION = 1 days;
+
+    /// @notice Maximum license duration (20 years, aligned with sunset)
+    uint256 public constant MAX_LICENSE_DURATION = 20 * 365 days;
+
     struct IPAsset {
         string title;
         string description;
@@ -142,6 +148,8 @@ contract IPToken is ERC721, ERC721URIStorage, AccessControl, ReentrancyGuard {
         require(_royaltyPercentage <= 10000, "Royalty cannot exceed 100%");
         require(!ipAssets[_tokenId].isPublicDomain, "IP is in public domain");
         require(licenses[_tokenId].length < MAX_LICENSES_PER_TOKEN, "License limit reached");
+        require(_duration >= MIN_LICENSE_DURATION, "License duration too short");
+        require(_duration <= MAX_LICENSE_DURATION, "License duration too long");
 
         License memory newLicense = License({
             licensee: _licensee,

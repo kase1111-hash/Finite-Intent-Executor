@@ -51,6 +51,12 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
     /// @notice Maximum number of funded projects per creator to prevent DoS
     uint256 public constant MAX_PROJECTS_PER_CREATOR = 100;
 
+    /// @notice Maximum number of execution logs per creator to prevent DoS
+    uint256 public constant MAX_EXECUTION_LOGS = 1000;
+
+    /// @notice Minimum time after sunset before emergency recovery is allowed
+    uint256 public constant EMERGENCY_RECOVERY_DELAY = 365 days;
+
     struct ExecutionRecord {
         address creator;
         string action;
@@ -105,6 +111,7 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
     event ProjectFunded(address indexed creator, address indexed recipient, uint256 amount);
     event InactionDefault(address indexed creator, string reason, uint256 confidence);
     event SunsetActivated(address indexed creator, uint256 timestamp);
+    event EmergencyFundsRecovered(address indexed creator, address indexed recipient, uint256 amount);
 
     constructor(address _lexiconHolderAddress) {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -151,6 +158,7 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
     ) external onlyRole(EXECUTOR_ROLE) nonReentrant {
         require(isExecutionActive(_creator), "Execution not active or sunset");
         require(bytes(_action).length <= MAX_ACTION_LENGTH, "Action string too long");
+        require(executionLogs[_creator].length < MAX_EXECUTION_LOGS, "Execution log limit reached");
         require(!_isProhibitedAction(_action), "Action violates No Political Agency Clause");
 
         // Resolve ambiguity via lexicon holder
@@ -361,6 +369,33 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
             if (found) return true;
         }
         return false;
+    }
+
+    /**
+     * @dev Emergency recovery of stuck funds after sunset + delay period
+     * @param _creator Intent creator whose funds are stuck
+     * @param _recipient Address to receive recovered funds
+     * @notice Only callable by admin after sunset + 1 year delay for safety
+     */
+    function emergencyRecoverFunds(
+        address _creator,
+        address _recipient
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant {
+        require(isSunset[_creator], "Creator not in sunset state");
+        require(
+            block.timestamp >= triggerTimestamps[_creator] + SUNSET_DURATION + EMERGENCY_RECOVERY_DELAY,
+            "Emergency recovery delay not elapsed"
+        );
+        require(treasuries[_creator] > 0, "No funds to recover");
+        require(_recipient != address(0), "Invalid recipient");
+
+        uint256 amount = treasuries[_creator];
+        treasuries[_creator] = 0;
+
+        emit EmergencyFundsRecovered(_creator, _recipient, amount);
+
+        (bool success, ) = payable(_recipient).call{value: amount}("");
+        require(success, "Emergency recovery transfer failed");
     }
 
     /**
