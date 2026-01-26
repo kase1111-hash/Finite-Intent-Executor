@@ -22,6 +22,13 @@ pragma solidity ^0.8.20;
  */
 library PoliticalFilter {
     // ============================================================
+    // CONSTANTS
+    // ============================================================
+
+    /// @dev Maximum string length for filtering to prevent DoS
+    uint256 private constant MAX_FILTER_STRING_LENGTH = 1000;
+
+    // ============================================================
     // PROHIBITED ACTION HASHES
     // Known political action types that are always blocked
     // ============================================================
@@ -176,6 +183,17 @@ library PoliticalFilter {
      */
     function checkAction(string memory action) internal pure returns (FilterResult memory result) {
         bytes memory actionBytes = bytes(action);
+
+        // Early return if string is too long (DoS protection)
+        if (actionBytes.length > MAX_FILTER_STRING_LENGTH) {
+            return FilterResult({
+                isProhibited: true,
+                category: PoliticalCategory.None,
+                matchedTerm: "string_too_long",
+                confidenceScore: 0
+            });
+        }
+
         bytes32 actionHash = keccak256(abi.encodePacked(action));
 
         // Layer 1: Check exact action hashes

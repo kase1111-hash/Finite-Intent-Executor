@@ -40,6 +40,9 @@ contract SunsetProtocol is AccessControl {
     /// @custom:invariant This value MUST always equal 630720000 seconds (20 * 365 days)
     uint256 public constant SUNSET_DURATION = 20 * 365 days;
 
+    /// @notice Maximum number of assets that can be archived in a single transaction
+    uint256 public constant MAX_ARCHIVE_BATCH_SIZE = 50;
+
     enum LicenseType {
         CC0,                    // Creative Commons Zero
         PublicDomain,          // Public Domain Equivalent
@@ -145,6 +148,7 @@ contract SunsetProtocol is AccessControl {
             _assetAddresses.length == _assetHashes.length,
             "Array length mismatch"
         );
+        require(_assetAddresses.length <= MAX_ARCHIVE_BATCH_SIZE, "Batch size exceeds limit");
 
         for (uint i = 0; i < _assetAddresses.length; i++) {
             AssetArchive memory archive = AssetArchive({

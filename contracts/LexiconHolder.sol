@@ -12,6 +12,12 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 contract LexiconHolder is AccessControl {
     bytes32 public constant INDEXER_ROLE = keccak256("INDEXER_ROLE");
 
+    /// @notice Maximum number of citations per semantic index to prevent DoS
+    uint256 public constant MAX_CITATIONS_PER_INDEX = 100;
+
+    /// @notice Maximum number of indices that can be created in a single batch
+    uint256 public constant MAX_BATCH_SIZE = 50;
+
     struct CorpusEntry {
         bytes32 corpusHash;
         string storageURI;
@@ -98,6 +104,7 @@ contract LexiconHolder is AccessControl {
     ) external onlyRole(INDEXER_ROLE) {
         require(corpusRegistry[_creator].isFrozen, "Corpus not frozen");
         require(_citations.length == _relevanceScores.length, "Array length mismatch");
+        require(_citations.length <= MAX_CITATIONS_PER_INDEX, "Too many citations");
 
         bytes32 indexKey = keccak256(abi.encodePacked(_keyword));
 
@@ -138,11 +145,14 @@ contract LexiconHolder is AccessControl {
             return ("", 0);
         }
 
-        // Find highest relevance citation
+        // Find highest relevance citation (bounded by MAX_CITATIONS_PER_INDEX)
         uint256 maxScore = 0;
         uint256 maxIndex = 0;
+        uint256 iterLimit = index.relevanceScores.length > MAX_CITATIONS_PER_INDEX
+            ? MAX_CITATIONS_PER_INDEX
+            : index.relevanceScores.length;
 
-        for (uint i = 0; i < index.relevanceScores.length; i++) {
+        for (uint i = 0; i < iterLimit; i++) {
             if (index.relevanceScores[i] > maxScore) {
                 maxScore = index.relevanceScores[i];
                 maxIndex = i;
@@ -237,8 +247,12 @@ contract LexiconHolder is AccessControl {
     ) external onlyRole(INDEXER_ROLE) {
         require(_keywords.length == _citationsArray.length, "Array length mismatch");
         require(_keywords.length == _scoresArray.length, "Array length mismatch");
+        require(_keywords.length <= MAX_BATCH_SIZE, "Batch size exceeds limit");
 
         for (uint i = 0; i < _keywords.length; i++) {
+            require(_citationsArray[i].length <= MAX_CITATIONS_PER_INDEX, "Too many citations in batch item");
+            require(_citationsArray[i].length == _scoresArray[i].length, "Citations/scores mismatch in batch item");
+
             bytes32 indexKey = keccak256(abi.encodePacked(_keywords[i]));
 
             semanticIndices[_creator][indexKey] = SemanticIndex({

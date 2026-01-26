@@ -42,6 +42,9 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
     /// @custom:invariant This value MUST always equal 20 * 365 days
     uint256 public constant SUNSET_DURATION = 20 * 365 days;
 
+    /// @notice Maximum action string length to prevent DoS in string search
+    uint256 public constant MAX_ACTION_LENGTH = 1000;
+
     struct ExecutionRecord {
         address creator;
         string action;
@@ -141,6 +144,7 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
         bytes32 _corpusHash
     ) external onlyRole(EXECUTOR_ROLE) nonReentrant {
         require(isExecutionActive(_creator), "Execution not active or sunset");
+        require(bytes(_action).length <= MAX_ACTION_LENGTH, "Action string too long");
         require(!_isProhibitedAction(_action), "Action violates No Political Agency Clause");
 
         // Resolve ambiguity via lexicon holder
