@@ -17,7 +17,7 @@ This document provides security information for the Finite Intent Executor (FIE)
 | **Critical** | 4 | Fixed |
 | **High** | 9 | 9 Fixed |
 | **Medium** | 12 | 8 Fixed, 4 Acknowledged |
-| **Low** | 6 | Acknowledged |
+| **Low** | 6 | 2 Fixed, 4 Acknowledged |
 | **Informational** | 1 | Acknowledged |
 
 ### Critical Issues (All Fixed)
@@ -106,16 +106,16 @@ This document provides security information for the Finite Intent Executor (FIE)
 | MEDIUM-011 | Unbounded licenses in payRoyalty | IPToken.sol | **Fixed** (MAX_LICENSES_PER_TOKEN=100) |
 | MEDIUM-012 | Unbounded licenses in transition | IPToken.sol | **Fixed** (bounded iteration) |
 
-### Low Severity Issues (Acknowledged)
+### Low Severity Issues
 
-| ID | Description | File |
-|----|-------------|------|
-| LOW-001 | Minor timestamp manipulation | IntentCaptureModule.sol |
-| LOW-002 | Hardcoded confidence threshold | ExecutionAgent.sol |
-| LOW-003 | No stuck fund recovery | ExecutionAgent.sol |
-| LOW-004 | No asset ownership verification | SunsetProtocol.sol |
-| LOW-005 | No license duration validation | IPToken.sol |
-| LOW-006 | Token ID counter overflow (theoretical) | IPToken.sol |
+| ID | Description | File | Status |
+|----|-------------|------|--------|
+| LOW-001 | Minor timestamp manipulation | IntentCaptureModule.sol | Acknowledged |
+| LOW-002 | Hardcoded confidence threshold | ExecutionAgent.sol | By design |
+| LOW-003 | No stuck fund recovery | ExecutionAgent.sol | **Fixed** (emergencyRecoverFunds added) |
+| LOW-004 | No asset ownership verification | SunsetProtocol.sol | Acknowledged |
+| LOW-005 | No license duration validation | IPToken.sol | **Fixed** (MIN/MAX_LICENSE_DURATION) |
+| LOW-006 | Token ID counter overflow (theoretical) | IPToken.sol | Acknowledged |
 
 ---
 
@@ -162,10 +162,16 @@ The oracle proof verification is currently stubbed:
 ### 2. Array Bounds (Mitigated)
 Array bounds have been added to prevent DoS attacks:
 - Goals per creator: MAX_GOALS = 50
+- Assets per intent: MAX_ASSETS = 100
 - Licenses per token: MAX_LICENSES_PER_TOKEN = 100
 - Licenses per creator: MAX_LICENSES_PER_CREATOR = 100
+- Projects per creator: MAX_PROJECTS_PER_CREATOR = 100
+- Execution logs per creator: MAX_EXECUTION_LOGS = 1000
 - Semantic index citations: MAX_CITATIONS_PER_INDEX = 100
 - Batch operations: MAX_BATCH_SIZE = 50
+- Archive batch size: MAX_ARCHIVE_BATCH_SIZE = 50
+- Trusted signers: MAX_TRUSTED_SIGNERS = 20
+- Oracles: MAX_ORACLES = 10
 
 **Note:** These limits should be sufficient for normal operation while preventing gas exhaustion attacks.
 
@@ -293,8 +299,11 @@ Before mainnet deployment, engage external auditors to:
 - Fixed MEDIUM-006: ExecutionAgent licenses limit (MAX_LICENSES_PER_CREATOR=100, MAX_PROJECTS_PER_CREATOR=100)
 - Fixed MEDIUM-007: LexiconHolder batch limit (MAX_BATCH_SIZE=50)
 - Fixed MEDIUM-011/012: IPToken licenses limit (MAX_LICENSES_PER_TOKEN=100, bounded iteration)
+- Fixed LOW-003: ExecutionAgent emergency fund recovery (emergencyRecoverFunds with 1-year delay)
+- Fixed LOW-005: IPToken license duration validation (MIN=1 day, MAX=20 years)
 - Added TriggerMechanism array limits (MAX_TRUSTED_SIGNERS=20, MAX_ORACLES=10)
 - Added PoliticalFilter string length limit (MAX_FILTER_STRING_LENGTH=1000)
+- Added ExecutionAgent execution log limit (MAX_EXECUTION_LOGS=1000)
 
 ### 2025-12-23 - Security Fixes v1.0
 - Fixed CRITICAL-001: TriggerMechanism reentrancy
