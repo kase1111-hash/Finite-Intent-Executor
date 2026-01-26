@@ -12,6 +12,12 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 contract IntentCaptureModule is Ownable {
     using ECDSA for bytes32;
 
+    /// @notice Maximum number of goals per creator to prevent DoS
+    uint256 public constant MAX_GOALS = 50;
+
+    /// @notice Maximum number of assets per intent to prevent DoS
+    uint256 public constant MAX_ASSETS = 100;
+
     struct IntentGraph {
         bytes32 intentHash;          // Cryptographic hash of the intent
         bytes32 corpusHash;          // Hash of the contextual corpus (5-10 year window)
@@ -84,6 +90,7 @@ contract IntentCaptureModule is Ownable {
         require(_corpusEndYear - _corpusStartYear >= 5 && _corpusEndYear - _corpusStartYear <= 10,
                 "Corpus window must be 5-10 years");
         require(_assetAddresses.length > 0, "Must specify at least one asset");
+        require(_assetAddresses.length <= MAX_ASSETS, "Too many assets");
 
         intents[msg.sender] = IntentGraph({
             intentHash: _intentHash,
@@ -114,6 +121,7 @@ contract IntentCaptureModule is Ownable {
     ) external notTriggered notRevoked {
         require(intents[msg.sender].intentHash != bytes32(0), "Intent not captured");
         require(_priority >= 1 && _priority <= 100, "Priority must be 1-100");
+        require(goals[msg.sender].length < MAX_GOALS, "Maximum goals reached");
 
         goals[msg.sender].push(Goal({
             description: _description,
