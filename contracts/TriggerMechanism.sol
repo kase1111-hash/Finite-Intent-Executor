@@ -85,6 +85,12 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
     /// @dev Minimum confidence threshold for oracle verification (matches ExecutionAgent)
     uint256 public constant MIN_CONFIDENCE_THRESHOLD = 95;
 
+    /// @dev Maximum number of trusted signers allowed to prevent DoS in loops
+    uint256 public constant MAX_TRUSTED_SIGNERS = 20;
+
+    /// @dev Maximum number of oracles allowed to prevent DoS in loops
+    uint256 public constant MAX_ORACLES = 10;
+
     event TriggerConfigured(address indexed creator, TriggerType triggerType);
     event DeadmanCheckIn(address indexed creator, uint256 timestamp);
     event TrustedSignatureReceived(address indexed creator, address indexed signer);
@@ -171,6 +177,7 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
     ) external {
         require(_signers.length >= _requiredSignatures, "Not enough signers");
         require(_requiredSignatures >= 2, "Must require at least 2 signatures");
+        require(_signers.length <= MAX_TRUSTED_SIGNERS, "Too many signers");
         require(!triggers[msg.sender].isTriggered, "Already triggered");
 
         triggers[msg.sender] = TriggerConfig({
@@ -193,6 +200,7 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
      */
     function configureOracleVerified(address[] memory _oracles) external {
         require(_oracles.length > 0, "Must specify at least one oracle");
+        require(_oracles.length <= MAX_ORACLES, "Too many oracles");
         require(!triggers[msg.sender].isTriggered, "Already triggered");
 
         triggers[msg.sender] = TriggerConfig({

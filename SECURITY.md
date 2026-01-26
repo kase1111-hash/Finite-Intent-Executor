@@ -15,8 +15,8 @@ This document provides security information for the Finite Intent Executor (FIE)
 | Severity | Count | Status |
 |----------|-------|--------|
 | **Critical** | 4 | Fixed |
-| **High** | 9 | 5 Fixed, 4 Acknowledged |
-| **Medium** | 12 | Acknowledged |
+| **High** | 9 | 9 Fixed |
+| **Medium** | 12 | 8 Fixed, 4 Acknowledged |
 | **Low** | 6 | Acknowledged |
 | **Informational** | 1 | Acknowledged |
 
@@ -74,12 +74,14 @@ This document provides security information for the Finite Intent Executor (FIE)
 #### HIGH-006: Unbounded Loop in LexiconHolder.resolveAmbiguity
 - **File:** `contracts/LexiconHolder.sol:145-150`
 - **Issue:** Loop over relevanceScores array
-- **Status:** Acknowledged - limited by index creation
+- **Fix:** Added MAX_CITATIONS_PER_INDEX (100) limit with bounded iteration
+- **Status:** Fixed
 
 #### HIGH-007: Unbounded Loop in SunsetProtocol.archiveAssets
 - **File:** `contracts/SunsetProtocol.sol:134-143`
 - **Issue:** No limit on assets per transaction
-- **Status:** Acknowledged - operator responsibility
+- **Fix:** Added MAX_ARCHIVE_BATCH_SIZE (50) limit
+- **Status:** Fixed
 
 #### HIGH-009: Circular Dependency Risk
 - **Files:** TriggerMechanism.sol, IntentCaptureModule.sol
@@ -87,22 +89,22 @@ This document provides security information for the Finite Intent Executor (FIE)
 - **Fix:** Fixed by HIGH-001 resolution
 - **Status:** Fixed
 
-### Medium Severity Issues (Acknowledged)
+### Medium Severity Issues
 
 | ID | Description | File | Status |
 |----|-------------|------|--------|
-| MEDIUM-001 | Unbounded goals array | IntentCaptureModule.sol | Acknowledged |
+| MEDIUM-001 | Unbounded goals array | IntentCaptureModule.sol | **Fixed** (MAX_GOALS=50, MAX_ASSETS=100) |
 | MEDIUM-002 | No intent update mechanism | IntentCaptureModule.sol | By design |
 | MEDIUM-003 | No trigger config updates | TriggerMechanism.sol | By design |
 | MEDIUM-004 | ZK proof verification stubbed | TriggerMechanism.sol | Known limitation |
-| MEDIUM-005 | Unbounded loop in _contains | ExecutionAgent.sol | Acknowledged |
-| MEDIUM-006 | Unbounded licenses array | ExecutionAgent.sol | Acknowledged |
-| MEDIUM-007 | Unbounded batch operations | LexiconHolder.sol | Acknowledged |
+| MEDIUM-005 | Unbounded loop in _contains | ExecutionAgent.sol | **Fixed** (MAX_ACTION_LENGTH=1000) |
+| MEDIUM-006 | Unbounded licenses array | ExecutionAgent.sol | **Fixed** (MAX_LICENSES_PER_CREATOR=100) |
+| MEDIUM-007 | Unbounded batch operations | LexiconHolder.sol | **Fixed** (MAX_BATCH_SIZE=50) |
 | MEDIUM-008 | No corpus update mechanism | LexiconHolder.sol | By design |
 | MEDIUM-009 | emergencySunset callable by anyone | SunsetProtocol.sol | By design |
 | MEDIUM-010 | Timestamp for 20-year calc | SunsetProtocol.sol | Acknowledged |
-| MEDIUM-011 | Unbounded licenses in payRoyalty | IPToken.sol | Acknowledged |
-| MEDIUM-012 | Unbounded licenses in transition | IPToken.sol | Acknowledged |
+| MEDIUM-011 | Unbounded licenses in payRoyalty | IPToken.sol | **Fixed** (MAX_LICENSES_PER_TOKEN=100) |
+| MEDIUM-012 | Unbounded licenses in transition | IPToken.sol | **Fixed** (bounded iteration) |
 
 ### Low Severity Issues (Acknowledged)
 
@@ -157,13 +159,15 @@ The oracle proof verification is currently stubbed:
 ```
 **Recommendation:** Do not use oracle triggers in production until ZK verification is implemented.
 
-### 2. Unbounded Arrays
-Several contracts use unbounded arrays that could cause DoS:
-- Goals per creator
-- Licenses per token/creator
-- Semantic index citations
+### 2. Array Bounds (Mitigated)
+Array bounds have been added to prevent DoS attacks:
+- Goals per creator: MAX_GOALS = 50
+- Licenses per token: MAX_LICENSES_PER_TOKEN = 100
+- Licenses per creator: MAX_LICENSES_PER_CREATOR = 100
+- Semantic index citations: MAX_CITATIONS_PER_INDEX = 100
+- Batch operations: MAX_BATCH_SIZE = 50
 
-**Recommendation:** Monitor gas usage and implement pagination for large datasets.
+**Note:** These limits should be sufficient for normal operation while preventing gas exhaustion attacks.
 
 ### 3. Timestamp Dependence
 The system relies on `block.timestamp` for:
@@ -281,6 +285,17 @@ Before mainnet deployment, engage external auditors to:
 
 ## Changelog
 
+### 2026-01-26 - Security Fixes v1.1
+- Fixed HIGH-006: LexiconHolder.resolveAmbiguity bounded iteration (MAX_CITATIONS_PER_INDEX=100)
+- Fixed HIGH-007: SunsetProtocol.archiveAssets batch limit (MAX_ARCHIVE_BATCH_SIZE=50)
+- Fixed MEDIUM-001: IntentCaptureModule goals limit (MAX_GOALS=50, MAX_ASSETS=100)
+- Fixed MEDIUM-005: ExecutionAgent action length limit (MAX_ACTION_LENGTH=1000)
+- Fixed MEDIUM-006: ExecutionAgent licenses limit (MAX_LICENSES_PER_CREATOR=100, MAX_PROJECTS_PER_CREATOR=100)
+- Fixed MEDIUM-007: LexiconHolder batch limit (MAX_BATCH_SIZE=50)
+- Fixed MEDIUM-011/012: IPToken licenses limit (MAX_LICENSES_PER_TOKEN=100, bounded iteration)
+- Added TriggerMechanism array limits (MAX_TRUSTED_SIGNERS=20, MAX_ORACLES=10)
+- Added PoliticalFilter string length limit (MAX_FILTER_STRING_LENGTH=1000)
+
 ### 2025-12-23 - Security Fixes v1.0
 - Fixed CRITICAL-001: TriggerMechanism reentrancy
 - Fixed CRITICAL-002: LexiconHolder view function
@@ -293,4 +308,4 @@ Before mainnet deployment, engage external auditors to:
 
 *This security documentation should be updated as vulnerabilities are discovered and fixed.*
 
-*Last Updated: 2026-01-01*
+*Last Updated: 2026-01-26*

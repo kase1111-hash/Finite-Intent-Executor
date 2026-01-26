@@ -15,6 +15,9 @@ contract IPToken is ERC721, ERC721URIStorage, AccessControl, ReentrancyGuard {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant EXECUTOR_ROLE = keccak256("EXECUTOR_ROLE");
 
+    /// @notice Maximum number of licenses per token to prevent DoS in loops
+    uint256 public constant MAX_LICENSES_PER_TOKEN = 100;
+
     struct IPAsset {
         string title;
         string description;
@@ -138,6 +141,7 @@ contract IPToken is ERC721, ERC721URIStorage, AccessControl, ReentrancyGuard {
         require(_ownerOf(_tokenId) != address(0), "Token does not exist");
         require(_royaltyPercentage <= 10000, "Royalty cannot exceed 100%");
         require(!ipAssets[_tokenId].isPublicDomain, "IP is in public domain");
+        require(licenses[_tokenId].length < MAX_LICENSES_PER_TOKEN, "License limit reached");
 
         License memory newLicense = License({
             licensee: _licensee,
@@ -167,7 +171,10 @@ contract IPToken is ERC721, ERC721URIStorage, AccessControl, ReentrancyGuard {
 
         // Update revenue for active licenses FIRST (checks-effects-interactions)
         License[] storage tokenLicenses = licenses[_tokenId];
-        for (uint i = 0; i < tokenLicenses.length; i++) {
+        uint256 iterLimit = tokenLicenses.length > MAX_LICENSES_PER_TOKEN
+            ? MAX_LICENSES_PER_TOKEN
+            : tokenLicenses.length;
+        for (uint i = 0; i < iterLimit; i++) {
             if (
                 tokenLicenses[i].isActive &&
                 block.timestamp >= tokenLicenses[i].startTime &&
@@ -196,9 +203,12 @@ contract IPToken is ERC721, ERC721URIStorage, AccessControl, ReentrancyGuard {
         ipAssets[_tokenId].isPublicDomain = true;
         ipAssets[_tokenId].licenseType = "CC0";
 
-        // Deactivate all licenses
+        // Deactivate all licenses (bounded iteration)
         License[] storage tokenLicenses = licenses[_tokenId];
-        for (uint i = 0; i < tokenLicenses.length; i++) {
+        uint256 iterLimit = tokenLicenses.length > MAX_LICENSES_PER_TOKEN
+            ? MAX_LICENSES_PER_TOKEN
+            : tokenLicenses.length;
+        for (uint i = 0; i < iterLimit; i++) {
             tokenLicenses[i].isActive = false;
         }
 

@@ -42,6 +42,15 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
     /// @custom:invariant This value MUST always equal 20 * 365 days
     uint256 public constant SUNSET_DURATION = 20 * 365 days;
 
+    /// @notice Maximum action string length to prevent DoS in string search
+    uint256 public constant MAX_ACTION_LENGTH = 1000;
+
+    /// @notice Maximum number of licenses per creator to prevent DoS
+    uint256 public constant MAX_LICENSES_PER_CREATOR = 100;
+
+    /// @notice Maximum number of funded projects per creator to prevent DoS
+    uint256 public constant MAX_PROJECTS_PER_CREATOR = 100;
+
     struct ExecutionRecord {
         address creator;
         string action;
@@ -141,6 +150,7 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
         bytes32 _corpusHash
     ) external onlyRole(EXECUTOR_ROLE) nonReentrant {
         require(isExecutionActive(_creator), "Execution not active or sunset");
+        require(bytes(_action).length <= MAX_ACTION_LENGTH, "Action string too long");
         require(!_isProhibitedAction(_action), "Action violates No Political Agency Clause");
 
         // Resolve ambiguity via lexicon holder
@@ -189,6 +199,7 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
     ) external onlyRole(EXECUTOR_ROLE) {
         require(isExecutionActive(_creator), "Execution not active or sunset");
         require(_royaltyPercentage <= 10000, "Royalty cannot exceed 100%");
+        require(licenses[_creator].length < MAX_LICENSES_PER_CREATOR, "License limit reached");
 
         // Verify this is aligned with intent via lexicon
         (string memory citation, uint256 confidence) = lexiconHolder.resolveAmbiguity(
@@ -232,6 +243,7 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
     ) external onlyRole(EXECUTOR_ROLE) nonReentrant {
         require(isExecutionActive(_creator), "Execution not active or sunset");
         require(treasuries[_creator] >= _amount, "Insufficient treasury funds");
+        require(fundedProjects[_creator].length < MAX_PROJECTS_PER_CREATOR, "Project limit reached");
 
         // Verify project alignment with intent
         (string memory citation, uint256 confidence) = lexiconHolder.resolveAmbiguity(
