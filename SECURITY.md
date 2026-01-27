@@ -184,7 +184,25 @@ The system relies on `block.timestamp` for:
 **Risk:** Miners can manipulate timestamp by ~15 seconds.
 **Mitigation:** All time-based operations use intervals >> 15 seconds.
 
-### 4. Single-Chain Deployment
+### 4. Political Filter Limitations (Acknowledged)
+The keyword-based political filter cannot detect:
+- Novel political terms not in the keyword list
+- Subtle political framing using non-political language
+- Encoded or obfuscated political content
+
+**Mitigation (v1.2):** Added homoglyph detection and common misspelling checks.
+**Recommendation:** Implement LLM-based semantic analysis for production use. The current filter is defense-in-depth, not comprehensive.
+
+### 5. Test Coverage Gap
+Current test coverage is ~30%, target is 90%+. While critical paths are tested, edge cases and failure modes need additional coverage.
+
+**Recommendation:** Before production, add:
+- Fuzz testing with Foundry (currently configured but needs more test cases)
+- Invariant tests for all critical properties
+- Integration tests for multi-contract flows
+- Gas consumption tests under adversarial conditions
+
+### 6. Single-Chain Deployment
 The threat model mentions multi-chain escrow, but only single-chain deployment is implemented.
 
 ---
@@ -291,6 +309,19 @@ Before mainnet deployment, engage external auditors to:
 
 ## Changelog
 
+### 2026-01-27 - Security Fixes v1.2 (Audit Response)
+- Fixed MEDIUM: SunsetProtocol.emergencySunset now fetches trigger timestamp from ExecutionAgent
+  - Prevents spoofed trigger timestamps from malicious callers
+  - Function signature changed: `emergencySunset(address _creator)` (no longer takes timestamp)
+- Fixed MEDIUM: ZKVerifierAdapter placeholder verification now reverts by default
+  - Added `allowPlaceholderVerification` flag (default: false)
+  - Placeholder verification only allowed when explicitly enabled for testing
+  - Production deployments will revert if real ZK verifiers not deployed
+- Enhanced LOW: PoliticalFilter now detects homoglyph attacks and common misspellings
+  - Added `_containsSuspiciousCharacters()` to block non-ASCII characters
+  - Added `_isCommonMisspelling()` to catch intentional typos
+  - Blocks Cyrillic/Greek look-alike characters used to bypass filters
+
 ### 2026-01-26 - Security Fixes v1.1
 - Fixed HIGH-006: LexiconHolder.resolveAmbiguity bounded iteration (MAX_CITATIONS_PER_INDEX=100)
 - Fixed HIGH-007: SunsetProtocol.archiveAssets batch limit (MAX_ARCHIVE_BATCH_SIZE=50)
@@ -317,4 +348,4 @@ Before mainnet deployment, engage external auditors to:
 
 *This security documentation should be updated as vulnerabilities are discovered and fixed.*
 
-*Last Updated: 2026-01-26*
+*Last Updated: 2026-01-27*

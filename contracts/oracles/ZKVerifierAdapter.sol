@@ -40,6 +40,10 @@ contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
     /// @dev Whether the oracle is currently accepting requests
     bool private _isActive;
 
+    /// @dev Whether placeholder verification is allowed (MUST be false in production)
+    /// @notice This flag allows non-cryptographic verification for testing only
+    bool public allowPlaceholderVerification;
+
     /// @dev Trusted issuer registry
     TrustedIssuerRegistry public issuerRegistry;
 
@@ -122,6 +126,7 @@ contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
     event Groth16VerifierSet(address indexed oldVerifier, address indexed newVerifier);
     event PlonkVerifierSet(address indexed oldVerifier, address indexed newVerifier);
     event OracleActiveStatusChanged(bool isActive);
+    event PlaceholderVerificationStatusChanged(bool allowed);
 
     // =============================================================================
     // CONSTRUCTOR
@@ -190,6 +195,19 @@ contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
     function setActive(bool _active) external onlyOwner {
         _isActive = _active;
         emit OracleActiveStatusChanged(_active);
+    }
+
+    /**
+     * @dev Enable or disable placeholder verification (FOR TESTING ONLY)
+     * @param _allow Whether to allow placeholder verification
+     * @notice WARNING: This MUST be set to false in production!
+     *         Placeholder verification does NOT cryptographically verify proofs.
+     *         It only performs basic sanity checks and should NEVER be used
+     *         for actual death certificate or medical verification.
+     */
+    function setAllowPlaceholderVerification(bool _allow) external onlyOwner {
+        allowPlaceholderVerification = _allow;
+        emit PlaceholderVerificationStatusChanged(_allow);
     }
 
     /**
@@ -525,12 +543,21 @@ contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
      * @dev Placeholder verification for testing or when verifiers not deployed
      * @notice This performs basic sanity checks but NOT cryptographic verification
      *         ONLY use for testing - replace with real verification in production
+     * @custom:security REVERTS by default unless allowPlaceholderVerification is true
      */
     function _verifyPlaceholder(
         bytes32 _keyId,
         bytes memory _proof,
         uint256[] memory _publicInputs
     ) internal view returns (bool) {
+        // SECURITY: Revert by default in production - placeholder verification
+        // does NOT cryptographically verify proofs and should NEVER be used
+        // for actual death certificate, medical, or legal verification.
+        require(
+            allowPlaceholderVerification,
+            "Placeholder verification disabled - deploy real ZK verifier"
+        );
+
         VerificationKeyData memory vk = verificationKeys[_keyId];
 
         // Basic sanity checks
@@ -555,6 +582,7 @@ contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
 
         // Placeholder: return true if sanity checks pass
         // WARNING: This does NOT verify the proof cryptographically!
+        // This path should only be reached in testing when allowPlaceholderVerification is true
         return true;
     }
 

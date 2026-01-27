@@ -194,6 +194,17 @@ library PoliticalFilter {
             });
         }
 
+        // Layer 0: Check for suspicious non-ASCII characters (homoglyph attack protection)
+        // Unicode homoglyphs like Cyrillic 'р' (U+0440) can bypass ASCII keyword filters
+        if (_containsSuspiciousCharacters(actionBytes)) {
+            return FilterResult({
+                isProhibited: true,
+                category: PoliticalCategory.None,
+                matchedTerm: "suspicious_characters",
+                confidenceScore: 80
+            });
+        }
+
         bytes32 actionHash = keccak256(abi.encodePacked(action));
 
         // Layer 1: Check exact action hashes
@@ -214,6 +225,17 @@ library PoliticalFilter {
                 category: _inferCategory(primaryTerm),
                 matchedTerm: primaryTerm,
                 confidenceScore: 95
+            });
+        }
+
+        // Layer 2.5: Check common misspellings of political terms
+        (bool misspellMatch, string memory misspellTerm) = _isCommonMisspelling(actionBytes);
+        if (misspellMatch) {
+            return FilterResult({
+                isProhibited: true,
+                category: _inferCategory(misspellTerm),
+                matchedTerm: misspellTerm,
+                confidenceScore: 90
             });
         }
 
@@ -378,5 +400,84 @@ library PoliticalFilter {
             return bytes1(uint8(b) + 32);
         }
         return b;
+    }
+
+    /**
+     * @dev Check for suspicious non-ASCII characters that could be used for homoglyph attacks
+     * @notice Detects multi-byte UTF-8 sequences that might contain look-alike characters
+     *         Cyrillic, Greek, and other scripts have characters visually similar to Latin
+     *         Examples: Cyrillic 'а' (U+0430) looks like Latin 'a'
+     *                   Cyrillic 'р' (U+0440) looks like Latin 'p'
+     */
+    function _containsSuspiciousCharacters(bytes memory str) private pure returns (bool) {
+        for (uint256 i = 0; i < str.length; i++) {
+            uint8 b = uint8(str[i]);
+
+            // Multi-byte UTF-8 sequences start with bytes >= 0x80
+            // Valid ASCII is 0x00-0x7F (0-127)
+            // UTF-8 continuation bytes are 0x80-0xBF
+            // UTF-8 leading bytes for multi-byte sequences are 0xC0-0xFF
+
+            // Detect multi-byte UTF-8 leading bytes (non-ASCII characters)
+            if (b >= 0xC0) {
+                // This is a multi-byte UTF-8 character
+                // Could be Cyrillic (U+0400-U+04FF), Greek (U+0370-U+03FF), etc.
+                // These are often used for homoglyph attacks
+                return true;
+            }
+
+            // Also flag high bytes that shouldn't appear in normal text
+            if (b >= 0x80 && b < 0xC0) {
+                // Unexpected UTF-8 continuation byte without leading byte
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @dev Check for common misspellings of political terms
+     * @notice Catches intentional typos used to bypass keyword filters
+     */
+    function _isCommonMisspelling(bytes memory actionBytes) private pure returns (bool, string memory) {
+        // Electoral misspellings
+        if (_containsCI(actionBytes, "electon")) return (true, "election");
+        if (_containsCI(actionBytes, "elction")) return (true, "election");
+        if (_containsCI(actionBytes, "elektion")) return (true, "election");
+        if (_containsCI(actionBytes, "electorial")) return (true, "electoral");
+        if (_containsCI(actionBytes, "campain")) return (true, "campaign");
+        if (_containsCI(actionBytes, "campaing")) return (true, "campaign");
+        if (_containsCI(actionBytes, "campagne")) return (true, "campaign");
+
+        // Political misspellings
+        if (_containsCI(actionBytes, "politcal")) return (true, "political");
+        if (_containsCI(actionBytes, "politacal")) return (true, "political");
+        if (_containsCI(actionBytes, "poilitical")) return (true, "political");
+        if (_containsCI(actionBytes, "politicial")) return (true, "political");
+        if (_containsCI(actionBytes, "pollitical")) return (true, "political");
+
+        // Lobbying misspellings
+        if (_containsCI(actionBytes, "lobying")) return (true, "lobbying");
+        if (_containsCI(actionBytes, "lobbying")) return (true, "lobbying");
+        if (_containsCI(actionBytes, "lobbiing")) return (true, "lobbying");
+        if (_containsCI(actionBytes, "lobyist")) return (true, "lobbyist");
+
+        // Vote misspellings
+        if (_containsCI(actionBytes, "votre")) return (true, "vote");
+        if (_containsCI(actionBytes, "voteing")) return (true, "voting");
+        if (_containsCI(actionBytes, "votting")) return (true, "voting");
+
+        // Government misspellings
+        if (_containsCI(actionBytes, "goverment")) return (true, "government");
+        if (_containsCI(actionBytes, "governement")) return (true, "government");
+        if (_containsCI(actionBytes, "govermnent")) return (true, "government");
+        if (_containsCI(actionBytes, "govenment")) return (true, "government");
+
+        // Legislation misspellings
+        if (_containsCI(actionBytes, "legistation")) return (true, "legislation");
+        if (_containsCI(actionBytes, "legeslation")) return (true, "legislation");
+        if (_containsCI(actionBytes, "legislaton")) return (true, "legislation");
+
+        return (false, "");
     }
 }

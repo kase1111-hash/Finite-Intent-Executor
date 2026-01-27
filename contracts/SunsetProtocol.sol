@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 interface IExecutionAgent {
     function activateSunset(address _creator) external;
     function isSunset(address _creator) external view returns (bool);
+    function triggerTimestamps(address _creator) external view returns (uint256);
 }
 
 interface ILexiconHolder {
@@ -277,18 +278,22 @@ contract SunsetProtocol is AccessControl {
     /**
      * @dev Emergency function to force sunset after 20 years
      * Can be called by anyone if sunset is due but not initiated
+     * @param _creator Address of the intent creator
+     * @notice Validates trigger timestamp against ExecutionAgent to prevent spoofing
      */
-    function emergencySunset(address _creator, uint256 _triggerTimestamp) external {
-        require(_triggerTimestamp > 0, "Invalid trigger timestamp");
+    function emergencySunset(address _creator) external {
+        // Fetch actual trigger timestamp from ExecutionAgent to prevent spoofing
+        uint256 actualTriggerTimestamp = executionAgent.triggerTimestamps(_creator);
+        require(actualTriggerTimestamp > 0, "Execution not activated for creator");
         require(
-            block.timestamp >= _triggerTimestamp + SUNSET_DURATION,
+            block.timestamp >= actualTriggerTimestamp + SUNSET_DURATION,
             "20 year duration not elapsed"
         );
         require(!sunsetStates[_creator].isSunset, "Sunset already initiated");
 
         sunsetStates[_creator] = SunsetState({
             creator: _creator,
-            triggerTimestamp: _triggerTimestamp,
+            triggerTimestamp: actualTriggerTimestamp,
             sunsetTimestamp: block.timestamp,
             isSunset: true,
             assetsArchived: false,
