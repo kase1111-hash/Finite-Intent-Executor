@@ -453,10 +453,8 @@ describe("Integration Tests - Full Lifecycle", function () {
       // 20 years pass
       await time.increase(TWENTY_YEARS + 1);
 
-      const triggerTimestamp = await executionAgent.triggerTimestamps(creator.address);
-
-      // Random person triggers emergency sunset
-      await sunsetProtocol.connect(recipient).emergencySunset(creator.address, triggerTimestamp);
+      // Random person triggers emergency sunset (no need to pass timestamp, it's fetched from ExecutionAgent)
+      await sunsetProtocol.connect(recipient).emergencySunset(creator.address);
 
       // Verify sunset activated
       expect(await executionAgent.isSunset(creator.address)).to.equal(true);
