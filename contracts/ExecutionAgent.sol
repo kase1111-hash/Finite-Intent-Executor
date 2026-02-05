@@ -158,7 +158,20 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
         require(isExecutionActive(_creator), "Execution not active or sunset");
         require(bytes(_action).length <= MAX_ACTION_LENGTH, "Action string too long");
         require(executionLogs[_creator].length < MAX_EXECUTION_LOGS, "Execution log limit reached");
-        require(!_checkPoliticalFilter(_creator, _action), "Action violates No Political Agency Clause");
+
+        // Political filter check: emit detailed event BEFORE reverting so that
+        // off-chain trace-level monitoring (e.g. Boundary-SIEM) can capture the
+        // violation details even though the on-chain event log is rolled back.
+        PoliticalFilter.FilterResult memory politicalResult = PoliticalFilter.checkAction(_action);
+        if (politicalResult.isProhibited) {
+            emit PoliticalActionBlocked(
+                _creator,
+                _action,
+                politicalResult.matchedTerm,
+                politicalResult.confidenceScore
+            );
+            revert("Action violates No Political Agency Clause");
+        }
 
         // Resolve ambiguity via lexicon holder
         (string memory citation, uint256 confidence) = lexiconHolder.resolveAmbiguity(

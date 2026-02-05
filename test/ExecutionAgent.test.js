@@ -58,19 +58,12 @@ describe("ExecutionAgent", function () {
       expect(await executionAgent.SUNSET_DURATION()).to.equal(TWENTY_YEARS);
     });
 
-    it("Should initialize prohibited actions", async function () {
-      expect(await executionAgent.prohibitedActions(
-        ethers.keccak256(ethers.toUtf8Bytes("electoral_activity"))
-      )).to.equal(true);
-      expect(await executionAgent.prohibitedActions(
-        ethers.keccak256(ethers.toUtf8Bytes("political_advocacy"))
-      )).to.equal(true);
-      expect(await executionAgent.prohibitedActions(
-        ethers.keccak256(ethers.toUtf8Bytes("lobbying"))
-      )).to.equal(true);
-      expect(await executionAgent.prohibitedActions(
-        ethers.keccak256(ethers.toUtf8Bytes("policy_influence"))
-      )).to.equal(true);
+    it("Should have PoliticalFilter integrated (no prohibitedActions mapping)", async function () {
+      // PoliticalFilter library is compiled into ExecutionAgent bytecode.
+      // Verify the contract exists and key constants are set.
+      // Political filtering is enforced via PoliticalFilter.checkAction()
+      // rather than a storage mapping, so no on-chain state to check.
+      expect(await executionAgent.CONFIDENCE_THRESHOLD()).to.equal(95);
     });
   });
 

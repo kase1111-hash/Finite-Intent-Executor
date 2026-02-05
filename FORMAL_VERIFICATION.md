@@ -79,10 +79,15 @@ The following invariants MUST hold for the system to be considered correct:
 
 | Invariant | Description | Contract | Verified By |
 |-----------|-------------|----------|-------------|
-| **No Electoral Activity** | `electoral_activity` always prohibited | ExecutionAgent | Certora |
-| **No Political Advocacy** | `political_advocacy` always prohibited | ExecutionAgent | Certora |
-| **No Lobbying** | `lobbying` always prohibited | ExecutionAgent | Certora |
-| **No Policy Influence** | `policy_influence` always prohibited | ExecutionAgent | Certora |
+| **No Electoral Activity** | `electoral_activity` always prohibited | ExecutionAgent (PoliticalFilter) | Bytecode (compiled-in library) |
+| **No Political Advocacy** | `political_advocacy` always prohibited | ExecutionAgent (PoliticalFilter) | Bytecode (compiled-in library) |
+| **No Lobbying** | `lobbying` always prohibited | ExecutionAgent (PoliticalFilter) | Bytecode (compiled-in library) |
+| **No Policy Influence** | `policy_influence` always prohibited | ExecutionAgent (PoliticalFilter) | Bytecode (compiled-in library) |
+
+> **Note:** Political filtering is enforced by the `PoliticalFilter` library, which is compiled
+> into ExecutionAgent bytecode. Keywords are compile-time constants and cannot be modified at
+> runtime, making this invariant inherently immutable. The 95% confidence threshold and sunset
+> duration serve as secondary enforcement via Certora-verified rules.
 
 ### 6. Immutability Invariants
 
@@ -123,7 +128,7 @@ The following invariants MUST hold for the system to be considered correct:
 3. `sunsetActivatesAfterTwentyYears` - Automatic deactivation
 4. `actionsRequireActiveExecution` - Actions require active state
 5. `treasuryNonNegative` - No negative balances
-6. `prohibitedActionsImmutable` - Political blocks immutable
+6. _(Removed)_ `prohibitedActionsImmutable` — replaced by compiled-in PoliticalFilter library (see §5 above)
 7. `fundDistributionRequiresSufficientFunds` - Sufficient funds required
 8. `revenueDistributionPreservesValue` - Value conservation
 
@@ -299,4 +304,4 @@ For verification questions or to report counterexamples:
 
 ---
 
-*Last Updated: 2026-01-01*
+*Last Updated: 2026-02-05*

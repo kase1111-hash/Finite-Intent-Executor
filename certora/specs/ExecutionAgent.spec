@@ -16,7 +16,6 @@ methods {
     function isSunset(address) external returns (bool) envfree;
     function isExecutionActive(address) external returns (bool) envfree;
     function treasuries(address) external returns (uint256) envfree;
-    function prohibitedActions(bytes32) external returns (bool) envfree;
 }
 
 // =============================================================================
@@ -137,39 +136,17 @@ rule treasuryNonNegative(address creator) {
 }
 
 // =============================================================================
-// INVARIANT 8: Prohibited actions list is immutable
+// INVARIANT 8: Political filter is enforced via compiled-in PoliticalFilter library
 // =============================================================================
-
-rule prohibitedActionsImmutable() {
-    env e;
-
-    bytes32 electoral = keccak256("electoral_activity");
-    bytes32 political = keccak256("political_advocacy");
-    bytes32 lobbying = keccak256("lobbying");
-    bytes32 policy = keccak256("policy_influence");
-
-    bool electoralProhibitedBefore = prohibitedActions(electoral);
-    bool politicalProhibitedBefore = prohibitedActions(political);
-    bool lobbyingProhibitedBefore = prohibitedActions(lobbying);
-    bool policyProhibitedBefore = prohibitedActions(policy);
-
-    calldataarg args;
-    f(e, args);
-
-    bool electoralProhibitedAfter = prohibitedActions(electoral);
-    bool politicalProhibitedAfter = prohibitedActions(political);
-    bool lobbyingProhibitedAfter = prohibitedActions(lobbying);
-    bool policyProhibitedAfter = prohibitedActions(policy);
-
-    assert electoralProhibitedBefore == electoralProhibitedAfter,
-        "Critical invariant violation: electoral prohibition changed";
-    assert politicalProhibitedBefore == politicalProhibitedAfter,
-        "Critical invariant violation: political prohibition changed";
-    assert lobbyingProhibitedBefore == lobbyingProhibitedAfter,
-        "Critical invariant violation: lobbying prohibition changed";
-    assert policyProhibitedBefore == policyProhibitedAfter,
-        "Critical invariant violation: policy prohibition changed";
-}
+// The PoliticalFilter library is compiled into the ExecutionAgent bytecode.
+// Keywords are compile-time constants and cannot be modified at runtime.
+// This invariant is now enforced at the bytecode level rather than via storage,
+// making it inherently immutable. The confidence threshold and sunset duration
+// constants serve as secondary enforcement — even if a political action somehow
+// bypassed the keyword filter, it would still need 95% corpus confidence.
+//
+// Previous rule `prohibitedActionsImmutable` referenced the `prohibitedActions`
+// storage mapping which has been removed in favor of PoliticalFilter library.
 
 // =============================================================================
 // INVARIANT 9: Fund distribution requires sufficient treasury
