@@ -117,10 +117,10 @@ describe("SunsetProtocol", function () {
       ).to.be.revertedWith("20 year duration not elapsed");
     });
 
-    it("Should reject invalid trigger timestamp", async function () {
+    it("Should reject mismatched trigger timestamp", async function () {
       await expect(
         sunsetProtocol.connect(operator).initiateSunset(creator.address, 0)
-      ).to.be.revertedWith("Invalid trigger timestamp");
+      ).to.be.revertedWith("Trigger timestamp does not match ExecutionAgent");
     });
 
     it("Should reject double sunset initiation", async function () {
@@ -422,39 +422,37 @@ describe("SunsetProtocol", function () {
 
   describe("Emergency Sunset", function () {
     it("Should allow anyone to trigger emergency sunset after 20 years", async function () {
-      const triggerTimestamp = await executionAgent.triggerTimestamps(creator.address);
       await time.increase(TWENTY_YEARS + 1);
 
-      // Non-operator can trigger emergency sunset
-      await sunsetProtocol.connect(creator2).emergencySunset(creator.address, triggerTimestamp);
+      // Non-operator can trigger emergency sunset (fetches timestamp from ExecutionAgent)
+      await sunsetProtocol.connect(creator2).emergencySunset(creator.address);
 
       const state = await sunsetProtocol.getSunsetState(creator.address);
       expect(state.isSunset).to.equal(true);
     });
 
     it("Should emit SunsetInitiated and ExecutionHalted events", async function () {
-      const triggerTimestamp = await executionAgent.triggerTimestamps(creator.address);
       await time.increase(TWENTY_YEARS + 1);
 
       await expect(
-        sunsetProtocol.connect(creator2).emergencySunset(creator.address, triggerTimestamp)
+        sunsetProtocol.connect(creator2).emergencySunset(creator.address)
       ).to.emit(sunsetProtocol, "SunsetInitiated")
         .and.to.emit(sunsetProtocol, "ExecutionHalted");
     });
 
     it("Should reject emergency sunset before 20 years", async function () {
-      const triggerTimestamp = await executionAgent.triggerTimestamps(creator.address);
       await time.increase(TWENTY_YEARS - 1000);
 
       await expect(
-        sunsetProtocol.connect(creator2).emergencySunset(creator.address, triggerTimestamp)
+        sunsetProtocol.connect(creator2).emergencySunset(creator.address)
       ).to.be.revertedWith("20 year duration not elapsed");
     });
 
-    it("Should reject invalid trigger timestamp", async function () {
+    it("Should reject if execution not activated", async function () {
+      // creator2 has no execution activated
       await expect(
-        sunsetProtocol.connect(creator2).emergencySunset(creator.address, 0)
-      ).to.be.revertedWith("Invalid trigger timestamp");
+        sunsetProtocol.connect(creator2).emergencySunset(creator2.address)
+      ).to.be.revertedWith("Execution not activated for creator");
     });
 
     it("Should reject if already sunset", async function () {
@@ -464,7 +462,7 @@ describe("SunsetProtocol", function () {
       await sunsetProtocol.connect(operator).initiateSunset(creator.address, triggerTimestamp);
 
       await expect(
-        sunsetProtocol.connect(creator2).emergencySunset(creator.address, triggerTimestamp)
+        sunsetProtocol.connect(creator2).emergencySunset(creator.address)
       ).to.be.revertedWith("Sunset already initiated");
     });
   });
