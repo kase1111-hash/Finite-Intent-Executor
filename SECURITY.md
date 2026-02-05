@@ -309,6 +309,26 @@ Before mainnet deployment, engage external auditors to:
 
 ## Changelog
 
+### 2026-02-05 - Evaluation Response v1.3
+- **CRITICAL**: Connected PoliticalFilter library to ExecutionAgent
+  - Replaced inline 4-keyword case-sensitive check with full PoliticalFilter.checkAction()
+  - Now enforces 50+ keywords, case-insensitive matching, homoglyph detection, misspelling coverage
+  - Added `PoliticalActionBlocked` event with matched term and confidence score
+  - Removed unused `prohibitedActions` mapping and constructor initialization
+- **CRITICAL**: Connected ErrorHandler library to ExecutionAgent (import only; events available)
+- **HIGH**: SunsetProtocol.initiateSunset now validates timestamp against ExecutionAgent
+  - Prevents spoofed trigger timestamps from compromised operators
+  - Requires `_triggerTimestamp == executionAgent.triggerTimestamps(_creator)`
+- **HIGH**: TriggerMechanism.submitOracleProof now requires non-empty proof data
+  - Added `require(_proof.length > 0)` to prevent empty-data triggers
+  - Added deprecation warning in NatSpec directing to OracleRegistry/ZKVerifierAdapter
+- **MEDIUM**: Fixed empty test bodies in FIESystem.test.js (confidence threshold, political blocking)
+- **LOW**: Added CI/CD pipeline (.github/workflows/ci.yml)
+- **DOC**: Fixed README security table to match SECURITY.md
+- **DOC**: Fixed Solidity version inconsistency in README (^0.8.20, not 0.8.28)
+- **DOC**: Reclassified medical/legal ZK circuits from "Implemented" to "Entry Point" in SPECIFICATION.md
+- **DOC**: Documented immutable political keyword list as intentional design choice in SPECIFICATION.md
+
 ### 2026-01-27 - Security Fixes v1.2 (Audit Response)
 - Fixed MEDIUM: SunsetProtocol.emergencySunset now fetches trigger timestamp from ExecutionAgent
   - Prevents spoofed trigger timestamps from malicious callers
@@ -348,4 +368,4 @@ Before mainnet deployment, engage external auditors to:
 
 *This security documentation should be updated as vulnerabilities are discovered and fixed.*
 
-*Last Updated: 2026-01-27*
+*Last Updated: 2026-02-05*

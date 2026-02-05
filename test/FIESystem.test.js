@@ -221,25 +221,129 @@ describe("Finite Intent Executor System", function () {
   });
 
   describe("Execution Agent", function () {
-    it("Should require high confidence for action execution", async function () {
+    let corpusHash;
+
+    beforeEach(async function () {
+      // Set up: capture intent, configure trigger, trigger it, freeze corpus, activate execution
+      const intentHash = ethers.keccak256(ethers.toUtf8Bytes("Intent"));
+      corpusHash = ethers.keccak256(ethers.toUtf8Bytes("Corpus"));
+
+      await intentModule.connect(creator).captureIntent(
+        intentHash,
+        corpusHash,
+        "ipfs://corpus",
+        "ipfs://assets",
+        2020,
+        2025,
+        [await ipToken.getAddress()]
+      );
+
+      // Link trigger mechanism
+      await intentModule.setTriggerMechanism(await triggerMechanism.getAddress());
+
+      // Configure and execute trigger
+      await triggerMechanism.connect(creator).configureTrustedQuorum(
+        [trustedSigner1.address, trustedSigner2.address],
+        2
+      );
+      await triggerMechanism.connect(trustedSigner1).submitTrustedSignature(creator.address);
+      await triggerMechanism.connect(trustedSigner2).submitTrustedSignature(creator.address);
+
+      // Freeze corpus in lexicon holder
+      await lexiconHolder.freezeCorpus(
+        creator.address,
+        corpusHash,
+        "ipfs://corpus",
+        2020,
+        2025
+      );
+
+      // Activate execution
       const EXECUTOR_ROLE = await executionAgent.EXECUTOR_ROLE();
       await executionAgent.grantRole(EXECUTOR_ROLE, owner.address);
-
       await executionAgent.activateExecution(creator.address);
+    });
 
-      const corpusHash = ethers.keccak256(ethers.toUtf8Bytes("corpus"));
+    it("Should require high confidence for action execution", async function () {
+      // Create index with low confidence
+      await lexiconHolder.createSemanticIndex(
+        creator.address,
+        "ambiguous_action",
+        ["Unclear citation"],
+        [50] // Below 95%
+      );
 
-      // This would normally interact with lexicon holder
-      // In a real test, we'd mock the lexicon holder response
+      // Create index with high confidence
+      await lexiconHolder.createSemanticIndex(
+        creator.address,
+        "clear_action",
+        ["Clear citation with good support"],
+        [98] // Above 95%
+      );
+
+      // Low confidence should emit InactionDefault
+      await expect(
+        executionAgent.executeAction(creator.address, "ambiguous_action", "ambiguous_action", corpusHash)
+      ).to.emit(executionAgent, "InactionDefault");
+
+      // High confidence should emit ActionExecuted
+      await expect(
+        executionAgent.executeAction(creator.address, "clear_action", "clear_action", corpusHash)
+      ).to.emit(executionAgent, "ActionExecuted");
+
+      // Verify only high-confidence action was logged
+      const logs = await executionAgent.getExecutionLogs(creator.address);
+      expect(logs.length).to.equal(1);
+      expect(logs[0].action).to.equal("clear_action");
     });
 
     it("Should enforce no political agency clause", async function () {
-      // The contract should reject actions with political keywords
-      const EXECUTOR_ROLE = await executionAgent.EXECUTOR_ROLE();
-      await executionAgent.grantRole(EXECUTOR_ROLE, owner.address);
+      // Test various political actions are blocked by the PoliticalFilter library
+      const politicalActions = [
+        "electoral_campaign_donation",
+        "political_party_support",
+        "lobbying_for_legislation",
+        "support the campaign",
+        "vote for candidate",
+        "Contact your senator",
+        "government regulatory capture"
+      ];
 
-      await executionAgent.activateExecution(creator.address);
-      // Political actions should be blocked
+      for (const action of politicalActions) {
+        await expect(
+          executionAgent.executeAction(creator.address, action, "query", corpusHash)
+        ).to.be.revertedWith("Action violates No Political Agency Clause");
+      }
+    });
+
+    it("Should block case-insensitive political keywords", async function () {
+      // These should all be caught by the PoliticalFilter library's case-insensitive matching
+      const caseVariations = [
+        "ELECTORAL activity",
+        "Political advocacy",
+        "LOBBYING congress",
+        "Campaign Donation"
+      ];
+
+      for (const action of caseVariations) {
+        await expect(
+          executionAgent.executeAction(creator.address, action, "query", corpusHash)
+        ).to.be.revertedWith("Action violates No Political Agency Clause");
+      }
+    });
+
+    it("Should allow non-political actions", async function () {
+      // Create high-confidence index for a non-political action
+      await lexiconHolder.createSemanticIndex(
+        creator.address,
+        "fund_project",
+        ["Fund open source development"],
+        [98]
+      );
+
+      await expect(
+        executionAgent.executeAction(creator.address, "fund_project", "fund_project", corpusHash)
+      ).to.emit(executionAgent, "ActionExecuted");
     });
   });
 

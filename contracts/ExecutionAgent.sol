@@ -3,6 +3,8 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "./libraries/PoliticalFilter.sol";
+import "./libraries/ErrorHandler.sol";
 
 interface ILexiconHolder {
     function resolveAmbiguity(
@@ -91,9 +93,6 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
     mapping(address => Project[]) public fundedProjects;
     mapping(address => uint256) public treasuries;
 
-    // No political agency - prohibited activities
-    mapping(bytes32 => bool) public prohibitedActions;
-
     event ActionExecuted(
         address indexed creator,
         string action,
@@ -110,6 +109,12 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
     event RevenueDistributed(address indexed creator, address indexed recipient, uint256 amount);
     event ProjectFunded(address indexed creator, address indexed recipient, uint256 amount);
     event InactionDefault(address indexed creator, string reason, uint256 confidence);
+    event PoliticalActionBlocked(
+        address indexed creator,
+        string action,
+        string matchedTerm,
+        uint8 confidenceScore
+    );
     event SunsetActivated(address indexed creator, uint256 timestamp);
     event EmergencyFundsRecovered(address indexed creator, address indexed recipient, uint256 amount);
 
@@ -117,12 +122,6 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(EXECUTOR_ROLE, msg.sender);
         lexiconHolder = ILexiconHolder(_lexiconHolderAddress);
-
-        // Initialize prohibited actions (No Political Agency Clause)
-        prohibitedActions[keccak256("electoral_activity")] = true;
-        prohibitedActions[keccak256("political_advocacy")] = true;
-        prohibitedActions[keccak256("lobbying")] = true;
-        prohibitedActions[keccak256("policy_influence")] = true;
     }
 
     /**
@@ -159,7 +158,7 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
         require(isExecutionActive(_creator), "Execution not active or sunset");
         require(bytes(_action).length <= MAX_ACTION_LENGTH, "Action string too long");
         require(executionLogs[_creator].length < MAX_EXECUTION_LOGS, "Execution log limit reached");
-        require(!_isProhibitedAction(_action), "Action violates No Political Agency Clause");
+        require(!_checkPoliticalFilter(_creator, _action), "Action violates No Political Agency Clause");
 
         // Resolve ambiguity via lexicon holder
         (string memory citation, uint256 confidence) = lexiconHolder.resolveAmbiguity(
@@ -331,44 +330,33 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
     }
 
     /**
-     * @dev Checks if an action is politically prohibited
+     * @dev Checks if an action is politically prohibited using the PoliticalFilter library.
+     * Performs multi-layer detection: exact hash matching, primary keywords (case-insensitive),
+     * misspelling detection, political phrase matching, secondary keywords, and homoglyph
+     * attack protection. See PoliticalFilter.sol for full detection layers.
      */
-    function _isProhibitedAction(string memory _action) internal view returns (bool) {
-        bytes32 actionHash = keccak256(abi.encodePacked(_action));
-        return prohibitedActions[actionHash] ||
-               _containsProhibitedKeyword(_action);
+    function _isProhibitedAction(string memory _action) internal pure returns (bool) {
+        return PoliticalFilter.isProhibited(_action);
     }
 
     /**
-     * @dev Checks for prohibited keywords in action
+     * @dev Performs full political filter check and emits detailed event on violation.
+     * Returns the FilterResult for callers that need detection details.
      */
-    function _containsProhibitedKeyword(string memory _action) internal pure returns (bool) {
-        bytes memory actionBytes = bytes(_action);
-        // Simple keyword check - in production, use more sophisticated NLP
-        return _contains(actionBytes, "electoral") ||
-               _contains(actionBytes, "political") ||
-               _contains(actionBytes, "lobbying") ||
-               _contains(actionBytes, "policy");
-    }
-
-    /**
-     * @dev Helper function to check if bytes contain a substring
-     */
-    function _contains(bytes memory _haystack, string memory _needle) internal pure returns (bool) {
-        bytes memory needleBytes = bytes(_needle);
-        if (needleBytes.length > _haystack.length) return false;
-
-        for (uint i = 0; i <= _haystack.length - needleBytes.length; i++) {
-            bool found = true;
-            for (uint j = 0; j < needleBytes.length; j++) {
-                if (_haystack[i + j] != needleBytes[j]) {
-                    found = false;
-                    break;
-                }
-            }
-            if (found) return true;
+    function _checkPoliticalFilter(
+        address _creator,
+        string memory _action
+    ) internal returns (bool isProhibited) {
+        PoliticalFilter.FilterResult memory result = PoliticalFilter.checkAction(_action);
+        if (result.isProhibited) {
+            emit PoliticalActionBlocked(
+                _creator,
+                _action,
+                result.matchedTerm,
+                result.confidenceScore
+            );
         }
-        return false;
+        return result.isProhibited;
     }
 
     /**
