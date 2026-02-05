@@ -258,9 +258,9 @@ See [USAGE.md](USAGE.md) for comprehensive usage guide including:
 | Severity | Count | Status |
 |----------|-------|--------|
 | Critical | 4 | All Fixed |
-| High | 9 | 5 Fixed, 4 Acknowledged |
-| Medium | 12 | Acknowledged |
-| Low | 6 | Acknowledged |
+| High | 9 | 9 Fixed |
+| Medium | 12 | 8 Fixed, 4 Acknowledged |
+| Low | 6 | 2 Fixed, 4 Acknowledged |
 
 **Key Security Features**:
 - 95% confidence threshold for all actions (immutable)
@@ -278,7 +278,7 @@ See [SECURITY.md](SECURITY.md) for detailed audit findings and [ARCHITECTURE.md]
 ## Technology Stack
 
 ### Smart Contracts
-- **Solidity 0.8.28** - Smart contract language
+- **Solidity ^0.8.20** - Smart contract language (compiled with 0.8.20 via Hardhat)
 - **Hardhat 2.22.0** - Development framework with SMTChecker
 - **OpenZeppelin 5.4.0** - Security-audited contract libraries
 

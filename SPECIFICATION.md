@@ -62,9 +62,11 @@ Narrow, scope-bounded AI executor.
 
 **Ambiguity Resolution Failure Mode**: If intent cannot be resolved with >=95% confidence through corpus citation, the Execution Agent MUST permanently default to inaction for the affected operation or branch. No speculative or creative interpretation permitted.
 
-**No Political Agency Clause**: The FIE MAY NOT engage in electoral activity, political advocacy, lobbying, or policy influence beyond passive licensing of the creator's authored works.
+**No Political Agency Clause**: The FIE MAY NOT engage in electoral activity, political advocacy, lobbying, or policy influence beyond passive licensing of the creator's authored works. Enforcement is via the `PoliticalFilter` library, which implements multi-layer detection: exact action hash matching, case-insensitive primary keywords (50+), common misspelling detection, political phrase matching, secondary contextual keywords, and homoglyph attack protection.
 
-**Logging**: All decisions logged on-chain with corpus citations.
+**Political Keyword Immutability (Design Choice)**: The political keyword list is compiled into the contract bytecode and is intentionally immutable. This is consistent with the drift-resistance philosophy: a posthumous executor should not have its constraints modified after deployment. Political language may evolve, but the contract's prohibition scope is fixed at deployment time. This prevents post-deployment weakening of the No Political Agency Clause by any party, including operators.
+
+**Logging**: All decisions logged on-chain with corpus citations. Political filter violations emit `PoliticalActionBlocked` events with the matched term and confidence score for SIEM integration.
 
 ### Lexicon Holders
 
@@ -164,9 +166,9 @@ All core smart contracts are implemented (6 core + 9 oracle/verifier):
 
 | Circuit | File | Status | Notes |
 |---------|------|--------|-------|
-| DeathCertificateVerifier | `circuits/certificate_verifier.circom` | Implemented | Death certificate ZK verification |
-| MedicalIncapacitationVerifier | `circuits/medical_verifier.circom` | Implemented | Medical certificate with expiration |
-| LegalDocumentVerifier | `circuits/legal_verifier.circom` | Implemented | Probate orders, court rulings |
+| DeathCertificateVerifier | `circuits/certificate_verifier.circom` | Implemented | Death certificate ZK verification (full circuit logic) |
+| MedicalIncapacitationVerifier | `circuits/medical_verifier.circom` | Entry Point | Wrapper including certificate_verifier; needs medical-specific logic |
+| LegalDocumentVerifier | `circuits/legal_verifier.circom` | Entry Point | Wrapper including certificate_verifier; needs legal-specific logic |
 
 ### Additional Tools
 

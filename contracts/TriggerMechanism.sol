@@ -517,9 +517,17 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Submit oracle proof for trigger
+     * @dev Submit oracle proof for trigger (LEGACY DIRECT MODE)
      * @param _creator Address of the intent creator
      * @param _proof Zero-knowledge proof or verification data
+     *
+     * @notice DEPRECATION WARNING: This function uses direct oracle trust without
+     * cryptographic proof verification. For production use, prefer OracleRegistry
+     * with multi-oracle consensus or ZKVerifierAdapter with on-chain proof verification.
+     * Direct mode trusts any registered oracle address unconditionally.
+     *
+     * Proof data is required but NOT cryptographically verified in this mode.
+     * A non-empty proof is required to prevent accidental empty-data triggers.
      */
     function submitOracleProof(address _creator, bytes memory _proof) external {
         TriggerConfig storage config = triggers[_creator];
@@ -527,9 +535,12 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
         require(config.triggerType == TriggerType.OracleVerified, "Not an oracle trigger");
         require(!config.isTriggered, "Already triggered");
         require(_isOracle(_creator, msg.sender), "Not an authorized oracle");
+        require(_proof.length > 0, "Proof data required");
 
-        // In production, verify the zero-knowledge proof here
-        // For now, we trust the oracle
+        // WARNING: Proof is NOT cryptographically verified in direct oracle mode.
+        // This mode trusts registered oracle addresses unconditionally.
+        // For production, use OracleRegistry (multi-oracle consensus) or
+        // ZKVerifierAdapter (on-chain ZK proof verification) instead.
         emit OracleProofSubmitted(_creator, msg.sender);
 
         _executeTrigger(_creator, config);

@@ -98,21 +98,29 @@ contract SunsetProtocol is AccessControl {
      * @dev Initiates sunset protocol when 20 years have passed
      * @param _creator Address of the intent creator
      * @param _triggerTimestamp When execution was triggered
+     * @notice Validates the provided timestamp against ExecutionAgent to prevent spoofing.
+     *         Prefer using this function over emergencySunset() when operating as SUNSET_OPERATOR.
      */
     function initiateSunset(
         address _creator,
         uint256 _triggerTimestamp
     ) external onlyRole(SUNSET_OPERATOR_ROLE) {
-        require(_triggerTimestamp > 0, "Invalid trigger timestamp");
+        // Validate trigger timestamp against ExecutionAgent to prevent spoofing
+        uint256 actualTriggerTimestamp = executionAgent.triggerTimestamps(_creator);
+        require(actualTriggerTimestamp > 0, "Execution not activated for creator");
         require(
-            block.timestamp >= _triggerTimestamp + SUNSET_DURATION,
+            _triggerTimestamp == actualTriggerTimestamp,
+            "Trigger timestamp does not match ExecutionAgent"
+        );
+        require(
+            block.timestamp >= actualTriggerTimestamp + SUNSET_DURATION,
             "20 year duration not elapsed"
         );
         require(!sunsetStates[_creator].isSunset, "Sunset already initiated");
 
         sunsetStates[_creator] = SunsetState({
             creator: _creator,
-            triggerTimestamp: _triggerTimestamp,
+            triggerTimestamp: actualTriggerTimestamp,
             sunsetTimestamp: block.timestamp,
             isSunset: true,
             assetsArchived: false,
