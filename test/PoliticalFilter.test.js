@@ -158,8 +158,10 @@ describe("PoliticalFilter", function () {
     });
 
     describe("policy keywords", function () {
-      it("should block actions containing 'policy'", async function () {
-        await expectPoliticalBlock("draft_new_policy");
+      // NOTE: 'policy' was moved from primary to secondary (advisory-only)
+      // to reduce false positives like "insurance policy distribution"
+      it("should allow actions containing 'policy' (now secondary/advisory)", async function () {
+        await expectAllowed("draft_new_policy");
       });
 
       it("should block actions containing 'legislation'", async function () {
@@ -283,54 +285,59 @@ describe("PoliticalFilter", function () {
   // ==========================================================================
   // Layer 4: Secondary Keyword Detection
   // ==========================================================================
-  describe("Layer 4 - Secondary Keyword Detection", function () {
-    describe("advocacy terms", function () {
-      it("should block actions containing 'advocacy'", async function () {
-        await expectPoliticalBlock("start_advocacy_group");
+  // ==========================================================================
+  // Layer 4: Secondary Keyword Detection (ADVISORY ONLY — non-blocking)
+  // Secondary matches return isProhibited: false, so these actions should
+  // pass through the filter and execute successfully.
+  // ==========================================================================
+  describe("Layer 4 - Secondary Keyword Detection (advisory, non-blocking)", function () {
+    describe("advocacy terms — should allow (advisory only)", function () {
+      it("should allow actions containing 'advocacy'", async function () {
+        await expectAllowed("start_advocacy_group");
       });
 
-      it("should block actions containing 'advocate'", async function () {
-        await expectPoliticalBlock("advocate_for_changes");
+      it("should allow actions containing 'advocate'", async function () {
+        await expectAllowed("advocate_for_changes");
       });
 
-      it("should block actions containing 'endorse'", async function () {
-        await expectPoliticalBlock("endorse_a_candidate");
+      it("should allow actions containing 'endorse'", async function () {
+        await expectAllowed("endorse_a_candidate");
       });
 
-      it("should block actions containing 'endorsement'", async function () {
-        await expectPoliticalBlock("seek_an_endorsement");
-      });
-    });
-
-    describe("regulatory terms", function () {
-      it("should block actions containing 'regulatory'", async function () {
-        await expectPoliticalBlock("fight_regulatory_burden");
-      });
-
-      it("should block actions containing 'regulation'", async function () {
-        await expectPoliticalBlock("oppose_this_regulation");
-      });
-
-      it("should block actions containing 'deregulation'", async function () {
-        await expectPoliticalBlock("push_for_deregulation");
+      it("should allow actions containing 'endorsement'", async function () {
+        await expectAllowed("seek_an_endorsement");
       });
     });
 
-    describe("party terms", function () {
-      it("should block actions containing 'republican'", async function () {
-        await expectPoliticalBlock("support_republican_party");
+    describe("regulatory terms — should allow (advisory only)", function () {
+      it("should allow actions containing 'regulatory'", async function () {
+        await expectAllowed("fight_regulatory_burden");
       });
 
-      it("should block actions containing 'democrat'", async function () {
-        await expectPoliticalBlock("join_democrat_caucus");
+      it("should allow actions containing 'regulation'", async function () {
+        await expectAllowed("oppose_this_regulation");
       });
 
-      it("should block actions containing 'conservative'", async function () {
-        await expectPoliticalBlock("fund_conservative_group");
+      it("should allow actions containing 'deregulation'", async function () {
+        await expectAllowed("push_for_deregulation");
+      });
+    });
+
+    describe("party terms — should allow (advisory only)", function () {
+      it("should allow actions containing 'republican'", async function () {
+        await expectAllowed("support_republican_party");
       });
 
-      it("should block actions containing 'liberal'", async function () {
-        await expectPoliticalBlock("liberal_agenda_support");
+      it("should allow actions containing 'democrat'", async function () {
+        await expectAllowed("join_democrat_caucus");
+      });
+
+      it("should allow actions containing 'conservative'", async function () {
+        await expectAllowed("fund_conservative_group");
+      });
+
+      it("should allow actions containing 'liberal'", async function () {
+        await expectAllowed("liberal_agenda_support");
       });
     });
   });
@@ -435,6 +442,131 @@ describe("PoliticalFilter", function () {
 
     it("should allow plain ASCII action strings", async function () {
       await expectAllowed("simple_benign_action_123");
+    });
+  });
+
+  // ==========================================================================
+  // Word Boundary Regression Tests
+  // ==========================================================================
+  describe("Word Boundary - 'vote' regression tests", function () {
+    it("should block standalone 'vote' at word boundary", async function () {
+      await expectPoliticalBlock("cast_a_vote");
+    });
+
+    it("should block 'vote' at start of string", async function () {
+      await expectPoliticalBlock("vote_for_candidate");
+    });
+
+    it("should block 'vote' at end of string", async function () {
+      await expectPoliticalBlock("please_vote");
+    });
+
+    it("should allow 'devote' (vote embedded in larger word)", async function () {
+      await expectAllowed("devote_resources_to_development");
+    });
+
+    it("should allow 'devoted' (vote embedded)", async function () {
+      await expectAllowed("devoted_team_member");
+    });
+
+    it("should allow 'invoke' (no word-boundary match)", async function () {
+      await expectAllowed("invoke_emergency_protocol");
+    });
+
+    it("should allow 'provoke' (no word-boundary match)", async function () {
+      await expectAllowed("provoke_discussion_on_roadmap");
+    });
+
+    it("should allow 'evoke' (no word-boundary match)", async function () {
+      await expectAllowed("evoke_memories_through_art");
+    });
+
+    it("should allow 'revoke' (no word-boundary match)", async function () {
+      await expectAllowed("revoke_access_permissions");
+    });
+
+    it("should block 'VOTE' in uppercase at word boundary", async function () {
+      await expectPoliticalBlock("VOTE_NOW_for_best_design");
+    });
+  });
+
+  // ==========================================================================
+  // False Positive Regression Tests (Phase 3 targets)
+  // ==========================================================================
+  describe("False Positive Regression - previously blocked, now allowed", function () {
+    it("should allow 'insurance policy distribution'", async function () {
+      await expectAllowed("insurance_policy_distribution");
+    });
+
+    it("should allow 'conservative estimate of costs'", async function () {
+      await expectAllowed("conservative_estimate_of_costs");
+    });
+
+    it("should allow 'liberal interpretation of terms'", async function () {
+      await expectAllowed("liberal_interpretation_of_terms");
+    });
+
+    it("should allow 'advocate for better tooling'", async function () {
+      await expectAllowed("advocate_for_better_tooling");
+    });
+
+    it("should allow 'regulatory compliance review'", async function () {
+      await expectAllowed("regulatory_compliance_review");
+    });
+
+    it("should allow 'area of influence in market'", async function () {
+      await expectAllowed("area_of_influence_in_market");
+    });
+
+    it("should allow 'update privacy policy'", async function () {
+      await expectAllowed("update_privacy_policy");
+    });
+
+    it("should allow 'strengthen password policy'", async function () {
+      await expectAllowed("strengthen_password_policy");
+    });
+
+    it("should allow 'endorse this software version'", async function () {
+      await expectAllowed("endorse_this_software_version");
+    });
+  });
+
+  // ==========================================================================
+  // Parameterized Corpus Tests (from test/fixtures/political-filter-corpus.json)
+  // ==========================================================================
+  describe("Corpus Test Suite", function () {
+    const corpus = require("./fixtures/political-filter-corpus.json");
+
+    describe("Must-block actions", function () {
+      corpus.must_block.forEach(({ action, reason }) => {
+        it(`should block: "${action}" (${reason})`, async function () {
+          await expectPoliticalBlock(action);
+        });
+      });
+    });
+
+    describe("Must-allow actions", function () {
+      corpus.must_allow.forEach(({ action, reason }) => {
+        it(`should allow: "${action}" (${reason})`, async function () {
+          await expectAllowed(action);
+        });
+      });
+    });
+
+    describe("Edge cases", function () {
+      corpus.edge_cases.forEach(({ action, expected, reason }) => {
+        if (expected === "blocked") {
+          it(`should block: "${action}" (${reason})`, async function () {
+            await expectPoliticalBlock(action);
+          });
+        } else {
+          // "allowed" and "advisory" both execute successfully
+          // (advisory = non-blocking secondary match)
+          it(`should allow: "${action}" (${reason})`, async function () {
+            await expectAllowed(action);
+          });
+        }
+      });
     });
   });
 });

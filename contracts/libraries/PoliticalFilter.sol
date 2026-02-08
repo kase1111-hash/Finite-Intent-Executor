@@ -78,9 +78,9 @@ library PoliticalFilter {
         if (_containsCI(actionBytes, "election")) return (true, "election");
         if (_containsCI(actionBytes, "campaign")) return (true, "campaign");
         if (_containsCI(actionBytes, "ballot")) return (true, "ballot");
-        if (_containsCI(actionBytes, "vote")) return (true, "vote");
-        if (_containsCI(actionBytes, "voting")) return (true, "voting");
-        if (_containsCI(actionBytes, "voter")) return (true, "voter");
+        if (_containsCIWordBoundary(actionBytes, "vote")) return (true, "vote");
+        if (_containsCIWordBoundary(actionBytes, "voting")) return (true, "voting");
+        if (_containsCIWordBoundary(actionBytes, "voter")) return (true, "voter");
 
         // Lobbying keywords
         if (_containsCI(actionBytes, "lobby")) return (true, "lobby");
@@ -92,8 +92,8 @@ library PoliticalFilter {
         if (_containsCI(actionBytes, "politician")) return (true, "politician");
         if (_containsCI(actionBytes, "partisan")) return (true, "partisan");
 
-        // Policy keywords
-        if (_containsCI(actionBytes, "policy")) return (true, "policy");
+        // Policy keywords (note: "policy" moved to secondary — too many false positives
+        // e.g., "insurance policy distribution")
         if (_containsCI(actionBytes, "legislation")) return (true, "legislation");
         if (_containsCI(actionBytes, "legislative")) return (true, "legislative");
         if (_containsCI(actionBytes, "lawmaker")) return (true, "lawmaker");
@@ -112,31 +112,40 @@ library PoliticalFilter {
     // ============================================================
 
     /**
-     * @dev Secondary keywords that may indicate political activity
-     * when combined with other indicators
+     * @dev Secondary keywords that may indicate political activity when
+     * combined with other indicators. Uses word-boundary matching to reduce
+     * false positives (e.g., "conservative estimate", "liberal interpretation").
+     *
+     * IMPORTANT: Secondary matches are advisory only (isProhibited = false).
+     * They are logged for review but do not block action execution.
+     * This prevents legitimate phrases like "insurance policy distribution",
+     * "advocate for better tooling", or "regulatory compliance" from being blocked.
      */
     function _isSecondaryPoliticalKeyword(bytes memory actionBytes) internal pure returns (bool, string memory) {
+        // Policy term (moved from primary — high false-positive rate)
+        if (_containsCIWordBoundary(actionBytes, "policy")) return (true, "policy");
+
         // Advocacy terms
-        if (_containsCI(actionBytes, "advocacy")) return (true, "advocacy");
-        if (_containsCI(actionBytes, "advocate")) return (true, "advocate");
-        if (_containsCI(actionBytes, "endorse")) return (true, "endorse");
-        if (_containsCI(actionBytes, "endorsement")) return (true, "endorsement");
+        if (_containsCIWordBoundary(actionBytes, "advocacy")) return (true, "advocacy");
+        if (_containsCIWordBoundary(actionBytes, "advocate")) return (true, "advocate");
+        if (_containsCIWordBoundary(actionBytes, "endorse")) return (true, "endorse");
+        if (_containsCIWordBoundary(actionBytes, "endorsement")) return (true, "endorsement");
 
         // Regulatory terms
-        if (_containsCI(actionBytes, "regulatory")) return (true, "regulatory");
-        if (_containsCI(actionBytes, "regulation")) return (true, "regulation");
-        if (_containsCI(actionBytes, "deregulation")) return (true, "deregulation");
+        if (_containsCIWordBoundary(actionBytes, "regulatory")) return (true, "regulatory");
+        if (_containsCIWordBoundary(actionBytes, "regulation")) return (true, "regulation");
+        if (_containsCIWordBoundary(actionBytes, "deregulation")) return (true, "deregulation");
 
         // Influence terms
-        if (_containsCI(actionBytes, "influence")) return (true, "influence");
-        if (_containsCI(actionBytes, "persuade")) return (true, "persuade");
-        if (_containsCI(actionBytes, "sway")) return (true, "sway");
+        if (_containsCIWordBoundary(actionBytes, "influence")) return (true, "influence");
+        if (_containsCIWordBoundary(actionBytes, "persuade")) return (true, "persuade");
+        if (_containsCIWordBoundary(actionBytes, "sway")) return (true, "sway");
 
         // Party terms
-        if (_containsCI(actionBytes, "republican")) return (true, "republican");
-        if (_containsCI(actionBytes, "democrat")) return (true, "democrat");
-        if (_containsCI(actionBytes, "conservative")) return (true, "conservative");
-        if (_containsCI(actionBytes, "liberal")) return (true, "liberal");
+        if (_containsCIWordBoundary(actionBytes, "republican")) return (true, "republican");
+        if (_containsCIWordBoundary(actionBytes, "democrat")) return (true, "democrat");
+        if (_containsCIWordBoundary(actionBytes, "conservative")) return (true, "conservative");
+        if (_containsCIWordBoundary(actionBytes, "liberal")) return (true, "liberal");
 
         return (false, "");
     }
@@ -200,7 +209,7 @@ library PoliticalFilter {
             return FilterResult({
                 isProhibited: true,
                 category: PoliticalCategory.None,
-                matchedTerm: "suspicious_characters",
+                matchedTerm: "non_ascii_characters",
                 confidenceScore: 80
             });
         }
@@ -250,11 +259,14 @@ library PoliticalFilter {
             });
         }
 
-        // Layer 4: Check secondary keywords
+        // Layer 4: Check secondary keywords (advisory only — does NOT block)
+        // Secondary matches are informational: they populate matchedTerm and category
+        // for logging but do not prevent action execution. This prevents false positives
+        // on legitimate phrases like "insurance policy", "conservative estimate", etc.
         (bool secondaryMatch, string memory secondaryTerm) = _isSecondaryPoliticalKeyword(actionBytes);
         if (secondaryMatch) {
             return FilterResult({
-                isProhibited: true,
+                isProhibited: false,
                 category: _inferCategory(secondaryTerm),
                 matchedTerm: secondaryTerm,
                 confidenceScore: 85
@@ -366,6 +378,47 @@ library PoliticalFilter {
 
         // Default to activism
         return PoliticalCategory.Activism;
+    }
+
+    /**
+     * @dev Check if a byte is an ASCII letter (a-z, A-Z)
+     */
+    function _isAlpha(bytes1 b) private pure returns (bool) {
+        uint8 v = uint8(b);
+        return (v >= 65 && v <= 90) || (v >= 97 && v <= 122);
+    }
+
+    /**
+     * @dev Case-insensitive substring check with word-boundary enforcement
+     * Matches only when the needle is bounded by non-alpha characters
+     * (spaces, underscores, digits, punctuation, or string edges).
+     * Prevents "devote" from matching "vote", "rsvp" from matching "svp", etc.
+     */
+    function _containsCIWordBoundary(bytes memory haystack, string memory needle) private pure returns (bool) {
+        bytes memory needleBytes = bytes(needle);
+        if (needleBytes.length > haystack.length) return false;
+        if (needleBytes.length == 0) return false;
+
+        for (uint256 i = 0; i <= haystack.length - needleBytes.length; i++) {
+            bool found = true;
+            for (uint256 j = 0; j < needleBytes.length; j++) {
+                bytes1 h = _toLower(haystack[i + j]);
+                bytes1 n = _toLower(needleBytes[j]);
+                if (h != n) {
+                    found = false;
+                    break;
+                }
+            }
+            if (found) {
+                // Check left boundary: position 0 or non-alpha character before match
+                if (i > 0 && _isAlpha(haystack[i - 1])) continue;
+                // Check right boundary: end of string or non-alpha character after match
+                uint256 endPos = i + needleBytes.length;
+                if (endPos < haystack.length && _isAlpha(haystack[endPos])) continue;
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

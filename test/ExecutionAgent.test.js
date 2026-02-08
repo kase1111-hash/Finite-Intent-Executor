@@ -252,7 +252,7 @@ describe("ExecutionAgent", function () {
       ).to.be.revertedWith("Action violates No Political Agency Clause");
     });
 
-    it("Should reject actions containing 'policy' keyword", async function () {
+    it("Should reject actions containing 'campaign' keyword", async function () {
       await expect(
         executionAgent.connect(executor).executeAction(
           creator.address,
