@@ -195,7 +195,7 @@ contract ExecutionAgentFuzzTest is Test {
         politicalKeywords[0] = "electoral";
         politicalKeywords[1] = "political";
         politicalKeywords[2] = "lobbying";
-        politicalKeywords[3] = "policy";
+        politicalKeywords[3] = "legislation";
 
         for (uint i = 0; i < politicalKeywords.length; i++) {
             string memory action = string(abi.encodePacked(baseAction, " ", politicalKeywords[i], " activity"));

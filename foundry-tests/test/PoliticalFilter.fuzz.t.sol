@@ -60,7 +60,7 @@ contract PoliticalFilterFuzzTest is Test {
             "electoral",
             "political",
             "lobbying",
-            "policy"
+            "legislation"
         ];
 
         for (uint256 i = 0; i < politicalKeywords.length; i++) {
