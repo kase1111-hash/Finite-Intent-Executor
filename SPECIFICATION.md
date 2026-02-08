@@ -58,7 +58,7 @@ Narrow, scope-bounded AI executor.
 - Fund aligned projects
 - Enforce constraints via smart contracts
 
-**Interpretation**: All ambiguous terms resolved exclusively against the frozen contextual corpus. The current on-chain implementation uses exact keyword-hash lookup via `LexiconHolder.resolveAmbiguity()`. The specification target is retrieval-augmented generation (off-chain semantic matching with on-chain verification), which is not yet implemented. See REFOCUS_PLAN.md Phase 4.
+**Interpretation**: All ambiguous terms resolved exclusively against the frozen contextual corpus. `LexiconHolder.resolveAmbiguity()` checks a resolution cache (populated by the off-chain indexer service via `submitResolution()`) first, then falls back to exact keyword-hash lookup. The off-chain indexer computes semantic embeddings against the frozen corpus and submits pre-computed resolution results on-chain via `INDEXER_ROLE`. This enables meaningful confidence scores for semantically similar queries without requiring full on-chain RAG. See `indexer-service/` for the off-chain component.
 
 **Ambiguity Resolution Failure Mode**: If intent cannot be resolved with >=95% confidence through corpus citation, the Execution Agent MUST permanently default to inaction for the affected operation or branch. No speculative or creative interpretation permitted.
 
@@ -76,9 +76,13 @@ Narrow, scope-bounded AI executor.
 
 **Functions**:
 1. Providing interpretive citations from the frozen corpus during active execution
-2. Post-sunset clustering of archived legacies
+2. Caching pre-computed semantic resolution results from the off-chain indexer
+3. Top-k and batch resolution for efficient multi-query processing
+4. Post-sunset clustering of archived legacies
 
-**Operation**: Operated via decentralized protocols or neutral LLM instances; no centralized control.
+**Resolution Architecture**: The off-chain indexer service (`indexer-service/`) watches for `CorpusFrozen` events, fetches the corpus from decentralized storage, computes vector embeddings, and submits resolution results on-chain via `submitResolution()` / `submitResolutionBatch()`. The `resolveAmbiguity()` function (now a gas-efficient `view` function) checks this resolution cache first, enabling meaningful intermediate confidence scores rather than binary hash-match results.
+
+**Operation**: Operated via decentralized protocols or neutral LLM instances; no centralized control. The indexer service is a non-actuating component — it submits semantic indices but cannot execute, modify, or veto any action.
 
 ### Sunset Protocol
 
@@ -151,7 +155,7 @@ All core smart contracts are implemented (6 core + 9 oracle/verifier):
 | **IntentCaptureModule** | `contracts/IntentCaptureModule.sol` | Implemented | Intent capture, goals, revocation, multi-version signing |
 | **TriggerMechanism** | `contracts/TriggerMechanism.sol` | Implemented | Deadman switch, quorum, enhanced oracle + ZK integration |
 | **ExecutionAgent** | `contracts/ExecutionAgent.sol` | Implemented | 95% confidence threshold, political filtering, licensing |
-| **LexiconHolder** | `contracts/LexiconHolder.sol` | Implemented | Corpus freezing, semantic indexing, clustering |
+| **LexiconHolder** | `contracts/LexiconHolder.sol` | Implemented | Corpus freezing, semantic indexing, resolution cache, top-k/batch resolution, clustering |
 | **SunsetProtocol** | `contracts/SunsetProtocol.sol` | Implemented | 20-year enforcement, public domain transition |
 | **IPToken** | `contracts/IPToken.sol` | Implemented | ERC721, licensing, royalties |
 | **IOracle** | `contracts/oracles/IOracle.sol` | Implemented | Standard oracle interface |

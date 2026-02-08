@@ -272,11 +272,25 @@ describe("LexiconHolder", function () {
       expect(result.confidence).to.equal(97);
     });
 
-    it("Should emit AmbiguityResolved event", async function () {
-      await expect(
-        lexiconHolder.resolveAmbiguity(creator.address, "funding", corpusHash)
-      ).to.emit(lexiconHolder, "AmbiguityResolved")
-        .withArgs(creator.address, "funding", "Primary citation about funding", 97);
+    it("Should resolve ambiguity as a view function without state change", async function () {
+      const result = await lexiconHolder.resolveAmbiguity.staticCall(
+        creator.address,
+        "funding",
+        corpusHash
+      );
+
+      expect(result.citation).to.equal("Primary citation about funding");
+      expect(result.confidence).to.equal(97);
+
+      // Call again to confirm no state was modified — same result
+      const result2 = await lexiconHolder.resolveAmbiguity.staticCall(
+        creator.address,
+        "funding",
+        corpusHash
+      );
+
+      expect(result2.citation).to.equal(result.citation);
+      expect(result2.confidence).to.equal(result.confidence);
     });
 
     it("Should reject corpus hash mismatch", async function () {
@@ -338,6 +352,542 @@ describe("LexiconHolder", function () {
       // Should return first one found with max score
       expect(result.citation).to.equal("Citation A");
       expect(result.confidence).to.equal(90);
+    });
+  });
+
+  describe("Resolution Cache", function () {
+    const corpusHash = ethers.keccak256(ethers.toUtf8Bytes("Corpus"));
+
+    beforeEach(async function () {
+      await lexiconHolder.connect(indexer).freezeCorpus(
+        creator.address,
+        corpusHash,
+        "ipfs://corpus",
+        2020,
+        2025
+      );
+
+      // Also create a semantic index for "funding" so we can test cache-vs-index preference
+      await lexiconHolder.connect(indexer).createSemanticIndex(
+        creator.address,
+        "funding",
+        ["Index citation about funding", "Index secondary citation"],
+        [90, 80]
+      );
+    });
+
+    it("Should submit resolution successfully", async function () {
+      await lexiconHolder.connect(indexer).submitResolution(
+        creator.address,
+        "grant allocation",
+        ["Cached citation A", "Cached citation B"],
+        [95, 88]
+      );
+
+      const res = await lexiconHolder.getResolution(creator.address, "grant allocation");
+      expect(res.citations.length).to.equal(2);
+      expect(res.citations[0]).to.equal("Cached citation A");
+      expect(res.citations[1]).to.equal("Cached citation B");
+      expect(res.confidences[0]).to.equal(95);
+      expect(res.confidences[1]).to.equal(88);
+      expect(res.resolvedAt).to.be.greaterThan(0);
+    });
+
+    it("Should emit ResolutionSubmitted event", async function () {
+      await expect(
+        lexiconHolder.connect(indexer).submitResolution(
+          creator.address,
+          "grant allocation",
+          ["Citation 1", "Citation 2"],
+          [95, 88]
+        )
+      ).to.emit(lexiconHolder, "ResolutionSubmitted")
+        .withArgs(creator.address, "grant allocation", 2);
+    });
+
+    it("Should reject empty resolution", async function () {
+      await expect(
+        lexiconHolder.connect(indexer).submitResolution(
+          creator.address,
+          "empty query",
+          [],
+          []
+        )
+      ).to.be.revertedWith("Empty resolution");
+    });
+
+    it("Should reject array length mismatch", async function () {
+      await expect(
+        lexiconHolder.connect(indexer).submitResolution(
+          creator.address,
+          "mismatched",
+          ["Citation 1", "Citation 2"],
+          [95] // Only one confidence
+        )
+      ).to.be.revertedWith("Array length mismatch");
+    });
+
+    it("Should reject too many results (> MAX_TOPK_RESULTS)", async function () {
+      const citations = new Array(11).fill("Citation");
+      const confidences = new Array(11).fill(80);
+
+      await expect(
+        lexiconHolder.connect(indexer).submitResolution(
+          creator.address,
+          "too many",
+          citations,
+          confidences
+        )
+      ).to.be.revertedWith("Too many results");
+    });
+
+    it("Should reject from non-indexer", async function () {
+      await expect(
+        lexiconHolder.connect(creator).submitResolution(
+          creator.address,
+          "unauthorized",
+          ["Citation"],
+          [90]
+        )
+      ).to.be.revertedWithCustomError(lexiconHolder, "AccessControlUnauthorizedAccount");
+    });
+
+    it("Should reject if corpus not frozen", async function () {
+      await expect(
+        lexiconHolder.connect(indexer).submitResolution(
+          creator2.address, // No frozen corpus
+          "no corpus",
+          ["Citation"],
+          [90]
+        )
+      ).to.be.revertedWith("Corpus not frozen");
+    });
+
+    it("resolveAmbiguity should prefer cached resolution over semantic index", async function () {
+      // Submit a resolution for "funding" with DIFFERENT citations than the semantic index
+      await lexiconHolder.connect(indexer).submitResolution(
+        creator.address,
+        "funding",
+        ["Cached resolution citation for funding"],
+        [99]
+      );
+
+      // resolveAmbiguity should return the cached result, not the semantic index
+      const result = await lexiconHolder.resolveAmbiguity.staticCall(
+        creator.address,
+        "funding",
+        corpusHash
+      );
+
+      // Cached citation should win over index citation ("Index citation about funding")
+      expect(result.citation).to.equal("Cached resolution citation for funding");
+      expect(result.confidence).to.equal(99);
+    });
+
+    it("Should allow updating existing resolution", async function () {
+      await lexiconHolder.connect(indexer).submitResolution(
+        creator.address,
+        "updatable",
+        ["Old cached citation"],
+        [70]
+      );
+
+      await lexiconHolder.connect(indexer).submitResolution(
+        creator.address,
+        "updatable",
+        ["New cached citation 1", "New cached citation 2"],
+        [98, 91]
+      );
+
+      const res = await lexiconHolder.getResolution(creator.address, "updatable");
+      expect(res.citations.length).to.equal(2);
+      expect(res.citations[0]).to.equal("New cached citation 1");
+      expect(res.confidences[0]).to.equal(98);
+    });
+  });
+
+  describe("Resolution Batch Submission", function () {
+    const corpusHash = ethers.keccak256(ethers.toUtf8Bytes("Corpus"));
+
+    beforeEach(async function () {
+      await lexiconHolder.connect(indexer).freezeCorpus(
+        creator.address,
+        corpusHash,
+        "ipfs://corpus",
+        2020,
+        2025
+      );
+    });
+
+    it("Should batch submit resolutions", async function () {
+      await lexiconHolder.connect(indexer).submitResolutionBatch(
+        creator.address,
+        ["query1", "query2", "query3"],
+        [
+          ["Q1 Citation A", "Q1 Citation B"],
+          ["Q2 Citation A"],
+          ["Q3 Citation A", "Q3 Citation B", "Q3 Citation C"]
+        ],
+        [
+          [95, 88],
+          [92],
+          [97, 85, 74]
+        ]
+      );
+
+      const res1 = await lexiconHolder.getResolution(creator.address, "query1");
+      const res2 = await lexiconHolder.getResolution(creator.address, "query2");
+      const res3 = await lexiconHolder.getResolution(creator.address, "query3");
+
+      expect(res1.citations.length).to.equal(2);
+      expect(res1.citations[0]).to.equal("Q1 Citation A");
+      expect(res2.citations.length).to.equal(1);
+      expect(res2.citations[0]).to.equal("Q2 Citation A");
+      expect(res3.citations.length).to.equal(3);
+      expect(res3.confidences[0]).to.equal(97);
+    });
+
+    it("Should emit ResolutionSubmitted for each query", async function () {
+      const tx = await lexiconHolder.connect(indexer).submitResolutionBatch(
+        creator.address,
+        ["batchQ1", "batchQ2"],
+        [["C1"], ["C2a", "C2b"]],
+        [[90], [85, 78]]
+      );
+
+      await expect(tx).to.emit(lexiconHolder, "ResolutionSubmitted")
+        .withArgs(creator.address, "batchQ1", 1);
+      await expect(tx).to.emit(lexiconHolder, "ResolutionSubmitted")
+        .withArgs(creator.address, "batchQ2", 2);
+    });
+
+    it("Should reject batch too large (> MAX_RESOLUTION_BATCH)", async function () {
+      const queries = new Array(21).fill("q").map((q, i) => `${q}${i}`);
+      const citationsArray = new Array(21).fill(["Citation"]);
+      const confidencesArray = new Array(21).fill([80]);
+
+      await expect(
+        lexiconHolder.connect(indexer).submitResolutionBatch(
+          creator.address,
+          queries,
+          citationsArray,
+          confidencesArray
+        )
+      ).to.be.revertedWith("Batch too large");
+    });
+
+    it("Should reject inner array mismatch", async function () {
+      await expect(
+        lexiconHolder.connect(indexer).submitResolutionBatch(
+          creator.address,
+          ["q1"],
+          [["C1", "C2"]], // 2 citations
+          [[90]]          // 1 confidence
+        )
+      ).to.be.revertedWith("Inner array mismatch");
+    });
+
+    it("Should reject empty resolution in batch", async function () {
+      await expect(
+        lexiconHolder.connect(indexer).submitResolutionBatch(
+          creator.address,
+          ["q1", "q2"],
+          [["C1"], []], // second query has empty citations
+          [[90], []]
+        )
+      ).to.be.revertedWith("Empty resolution in batch");
+    });
+  });
+
+  describe("Top-K Resolution", function () {
+    const corpusHash = ethers.keccak256(ethers.toUtf8Bytes("Corpus"));
+
+    beforeEach(async function () {
+      await lexiconHolder.connect(indexer).freezeCorpus(
+        creator.address,
+        corpusHash,
+        "ipfs://corpus",
+        2020,
+        2025
+      );
+
+      // Submit a cached resolution with multiple results
+      await lexiconHolder.connect(indexer).submitResolution(
+        creator.address,
+        "topk-cached",
+        ["Cached Best", "Cached Second", "Cached Third", "Cached Fourth", "Cached Fifth"],
+        [98, 90, 85, 72, 60]
+      );
+
+      // Create a semantic index for fallback testing
+      await lexiconHolder.connect(indexer).createSemanticIndex(
+        creator.address,
+        "topk-indexed",
+        ["Indexed Best", "Indexed Second", "Indexed Third"],
+        [95, 88, 70]
+      );
+    });
+
+    it("Should return top-k results from resolution cache", async function () {
+      const result = await lexiconHolder.resolveAmbiguityTopK.staticCall(
+        creator.address,
+        "topk-cached",
+        corpusHash,
+        3
+      );
+
+      expect(result.citations.length).to.equal(3);
+      expect(result.confidences.length).to.equal(3);
+      expect(result.citations[0]).to.equal("Cached Best");
+      expect(result.confidences[0]).to.equal(98);
+      expect(result.citations[1]).to.equal("Cached Second");
+      expect(result.confidences[1]).to.equal(90);
+      expect(result.citations[2]).to.equal("Cached Third");
+      expect(result.confidences[2]).to.equal(85);
+    });
+
+    it("Should return top-k results from semantic index fallback", async function () {
+      const result = await lexiconHolder.resolveAmbiguityTopK.staticCall(
+        creator.address,
+        "topk-indexed",
+        corpusHash,
+        2
+      );
+
+      expect(result.citations.length).to.equal(2);
+      expect(result.citations[0]).to.equal("Indexed Best");
+      expect(result.confidences[0]).to.equal(95);
+      expect(result.citations[1]).to.equal("Indexed Second");
+      expect(result.confidences[1]).to.equal(88);
+    });
+
+    it("Should return fewer than k if fewer results exist", async function () {
+      const result = await lexiconHolder.resolveAmbiguityTopK.staticCall(
+        creator.address,
+        "topk-indexed",
+        corpusHash,
+        10 // Only 3 results exist in the index
+      );
+
+      expect(result.citations.length).to.equal(3);
+      expect(result.confidences.length).to.equal(3);
+    });
+
+    it("Should reject k=0", async function () {
+      await expect(
+        lexiconHolder.resolveAmbiguityTopK(
+          creator.address,
+          "topk-cached",
+          corpusHash,
+          0
+        )
+      ).to.be.revertedWith("Invalid k value");
+    });
+
+    it("Should reject k > MAX_TOPK_RESULTS", async function () {
+      await expect(
+        lexiconHolder.resolveAmbiguityTopK(
+          creator.address,
+          "topk-cached",
+          corpusHash,
+          11
+        )
+      ).to.be.revertedWith("Invalid k value");
+    });
+
+    it("Should return results sorted by confidence (descending)", async function () {
+      // Submit a resolution with intentionally unsorted confidences
+      await lexiconHolder.connect(indexer).submitResolution(
+        creator.address,
+        "unsorted-query",
+        ["Low", "High", "Mid"],
+        [50, 99, 75]
+      );
+
+      const result = await lexiconHolder.resolveAmbiguityTopK.staticCall(
+        creator.address,
+        "unsorted-query",
+        corpusHash,
+        3
+      );
+
+      expect(result.confidences[0]).to.equal(99);
+      expect(result.confidences[1]).to.equal(75);
+      expect(result.confidences[2]).to.equal(50);
+      expect(result.citations[0]).to.equal("High");
+      expect(result.citations[1]).to.equal("Mid");
+      expect(result.citations[2]).to.equal("Low");
+    });
+
+    it("Should return empty arrays for non-existent query", async function () {
+      const result = await lexiconHolder.resolveAmbiguityTopK.staticCall(
+        creator.address,
+        "nonexistent-topk-query",
+        corpusHash,
+        5
+      );
+
+      expect(result.citations.length).to.equal(0);
+      expect(result.confidences.length).to.equal(0);
+    });
+  });
+
+  describe("Batch Ambiguity Resolution", function () {
+    const corpusHash = ethers.keccak256(ethers.toUtf8Bytes("Corpus"));
+
+    beforeEach(async function () {
+      await lexiconHolder.connect(indexer).freezeCorpus(
+        creator.address,
+        corpusHash,
+        "ipfs://corpus",
+        2020,
+        2025
+      );
+
+      // Create semantic index entries
+      await lexiconHolder.connect(indexer).createSemanticIndex(
+        creator.address,
+        "indexed-term",
+        ["Indexed citation for term"],
+        [91]
+      );
+
+      // Submit cached resolutions
+      await lexiconHolder.connect(indexer).submitResolution(
+        creator.address,
+        "cached-term",
+        ["Cached citation for term"],
+        [96]
+      );
+    });
+
+    it("Should resolve multiple queries in one call", async function () {
+      const result = await lexiconHolder.resolveAmbiguityBatch.staticCall(
+        creator.address,
+        ["cached-term", "indexed-term"],
+        corpusHash
+      );
+
+      expect(result.citations.length).to.equal(2);
+      expect(result.confidences.length).to.equal(2);
+      expect(result.citations[0]).to.equal("Cached citation for term");
+      expect(result.confidences[0]).to.equal(96);
+      expect(result.citations[1]).to.equal("Indexed citation for term");
+      expect(result.confidences[1]).to.equal(91);
+    });
+
+    it("Should handle mix of cached and indexed queries", async function () {
+      // Also submit a cached resolution for "indexed-term" to prove cache takes precedence
+      await lexiconHolder.connect(indexer).submitResolution(
+        creator.address,
+        "indexed-term",
+        ["Cache override for indexed-term"],
+        [99]
+      );
+
+      const result = await lexiconHolder.resolveAmbiguityBatch.staticCall(
+        creator.address,
+        ["cached-term", "indexed-term"],
+        corpusHash
+      );
+
+      // Both should come from cache now
+      expect(result.citations[0]).to.equal("Cached citation for term");
+      expect(result.confidences[0]).to.equal(96);
+      expect(result.citations[1]).to.equal("Cache override for indexed-term");
+      expect(result.confidences[1]).to.equal(99);
+    });
+
+    it("Should return empty for non-existent queries", async function () {
+      const result = await lexiconHolder.resolveAmbiguityBatch.staticCall(
+        creator.address,
+        ["nonexistent1", "nonexistent2"],
+        corpusHash
+      );
+
+      expect(result.citations[0]).to.equal("");
+      expect(result.confidences[0]).to.equal(0);
+      expect(result.citations[1]).to.equal("");
+      expect(result.confidences[1]).to.equal(0);
+    });
+
+    it("Should reject batch too large", async function () {
+      const queries = new Array(21).fill("q").map((q, i) => `${q}${i}`);
+
+      await expect(
+        lexiconHolder.resolveAmbiguityBatch(
+          creator.address,
+          queries,
+          corpusHash
+        )
+      ).to.be.revertedWith("Batch too large");
+    });
+  });
+
+  describe("Resolution View Functions", function () {
+    const corpusHash = ethers.keccak256(ethers.toUtf8Bytes("Corpus"));
+
+    beforeEach(async function () {
+      await lexiconHolder.connect(indexer).freezeCorpus(
+        creator.address,
+        corpusHash,
+        "ipfs://corpus",
+        2020,
+        2025
+      );
+    });
+
+    it("getResolution should return cached resolution", async function () {
+      await lexiconHolder.connect(indexer).submitResolution(
+        creator.address,
+        "view-test-query",
+        ["View Citation 1", "View Citation 2"],
+        [93, 81]
+      );
+
+      const res = await lexiconHolder.getResolution(creator.address, "view-test-query");
+      expect(res.citations.length).to.equal(2);
+      expect(res.citations[0]).to.equal("View Citation 1");
+      expect(res.citations[1]).to.equal("View Citation 2");
+      expect(res.confidences[0]).to.equal(93);
+      expect(res.confidences[1]).to.equal(81);
+      expect(res.resolvedAt).to.be.greaterThan(0);
+    });
+
+    it("getResolution should return empty for non-existent query", async function () {
+      const res = await lexiconHolder.getResolution(creator.address, "does-not-exist");
+      expect(res.citations.length).to.equal(0);
+      expect(res.confidences.length).to.equal(0);
+      expect(res.resolvedAt).to.equal(0);
+    });
+
+    it("resolveAmbiguity should be callable as view (no state change)", async function () {
+      await lexiconHolder.connect(indexer).createSemanticIndex(
+        creator.address,
+        "view-check",
+        ["View check citation"],
+        [87]
+      );
+
+      // Use staticCall to confirm it is a pure view call
+      const result = await lexiconHolder.resolveAmbiguity.staticCall(
+        creator.address,
+        "view-check",
+        corpusHash
+      );
+
+      expect(result.citation).to.equal("View check citation");
+      expect(result.confidence).to.equal(87);
+
+      // Call a second time — should produce the same result, proving no state mutation
+      const result2 = await lexiconHolder.resolveAmbiguity.staticCall(
+        creator.address,
+        "view-check",
+        corpusHash
+      );
+
+      expect(result2.citation).to.equal(result.citation);
+      expect(result2.confidence).to.equal(result.confidence);
     });
   });
 

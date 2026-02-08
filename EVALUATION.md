@@ -53,9 +53,9 @@ Consistently strong Solidity patterns:
 
 6. **`initiateSunset` takes a redundant parameter** (`SunsetProtocol.sol:104-114`): Accepts `_triggerTimestamp`, then immediately validates it against `executionAgent.triggerTimestamps(_creator)`. The parameter is pointless — the function could just read the on-chain value directly, saving calldata. The `emergencySunset` function (line 292) already does this correctly.
 
-7. **`LexiconHolder.resolveAmbiguity` emits events on every call** (`LexiconHolder.sol:165`): Not marked `view` because it emits `AmbiguityResolved`. Every action execution in `ExecutionAgent` pays additional gas for this event. Since `ExecutionAgent.executeAction` already emits `ActionExecuted`, the ambiguity event is duplicative in the execution path.
+7. **~~`LexiconHolder.resolveAmbiguity` emits events on every call~~** — **FIXED in Phase 4**: `resolveAmbiguity` is now a `view` function, saving gas on every execution path. Resolution events are emitted when the off-chain indexer submits results via `submitResolution()`.
 
-8. **Semantic resolution is exact-match only** (`LexiconHolder.sol:128-166`): The specification describes "retrieval-augmented generation against the frozen contextual corpus." The actual implementation is `keccak256(abi.encodePacked(_query))` matched against pre-stored indices — a hash table lookup. There's no RAG, no embeddings, no fuzzy matching. The 95% confidence threshold is only as meaningful as whoever manually populated the semantic indices. This is the largest gap between spec and implementation.
+8. **~~Semantic resolution is exact-match only~~** — **FIXED in Phase 4**: `resolveAmbiguity` now checks a resolution cache (populated by the off-chain indexer service via `submitResolution()`) before falling back to exact hash lookup. The indexer service computes semantic embeddings against the frozen corpus and submits meaningful confidence scores. New functions `resolveAmbiguityTopK` and `resolveAmbiguityBatch` support richer query patterns. See `indexer-service/` for the off-chain component.
 
 **Tech stack:**
 Appropriate throughout. Hardhat + OpenZeppelin 5.x is standard production Solidity tooling. React 19 + ethers.js 6 + Vite for frontend. Single production dependency (`@openzeppelin/contracts`). Lean and auditable.

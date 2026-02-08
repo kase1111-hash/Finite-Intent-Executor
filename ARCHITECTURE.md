@@ -4,7 +4,7 @@
 
 The Finite Intent Executor (FIE) is a modular blockchain system consisting of six core smart contracts, six oracle infrastructure contracts, and two ZK verifiers that work together to enable posthumous intent execution with strict temporal bounds and safeguards.
 
-*Last Updated: 2026-01-01*
+*Last Updated: 2026-02-08*
 
 **Related Documentation**:
 - [SPECIFICATION.md](SPECIFICATION.md) - Core specification and principles
@@ -252,16 +252,19 @@ struct EmbeddingCluster {
 
 **Key Functions**:
 - `freezeCorpus()`: Locks corpus immutably
-- `createSemanticIndex()`: Indexes keywords with citations
-- `resolveAmbiguity()`: Returns best citation with confidence
-- `createCluster()`: Creates semantic cluster
-- `assignLegacyToCluster()`: Groups similar legacies
+- `createSemanticIndex()`: Indexes keywords with citations (exact-match)
+- `submitResolution()` / `submitResolutionBatch()`: Off-chain indexer submits pre-computed semantic results
+- `resolveAmbiguity()`: Returns best citation with confidence (`view`, checks resolution cache first)
+- `resolveAmbiguityTopK()`: Returns top-k results sorted by confidence
+- `resolveAmbiguityBatch()`: Batch resolves multiple queries in a single call
+- `createCluster()` / `assignLegacyToCluster()`: Post-sunset semantic clustering
 
 **Security Features**:
-- Immutable corpus (cryptographic hash)
-- No execution authority
-- Read-only interpretation
-- Decentralized operation
+- Immutable corpus (cryptographic hash verification)
+- No execution authority (non-actuating)
+- Read-only interpretation (`resolveAmbiguity` is `view`)
+- Resolution cache verified against frozen corpus hash
+- Decentralized operation via off-chain indexer service (`indexer-service/`)
 
 ### 5. SunsetProtocol
 
@@ -668,7 +671,7 @@ The React-based dashboard (`frontend/`) provides a complete user interface:
 3. ~~Enhanced oracle integration (Chainlink, UMA)~~ ✅ Implemented
 4. Cross-chain bridges for multi-chain execution
 5. IPFS pinning service integration
-6. Enhanced semantic search (vector embeddings)
+6. ~~Enhanced semantic search (vector embeddings)~~ ✅ Implemented (Phase 4: resolution cache + off-chain indexer)
 7. Automated compliance checking
 8. Revenue streaming (Superfluid integration)
 
@@ -683,4 +686,4 @@ The React-based dashboard (`frontend/`) provides a complete user interface:
 
 For implementation examples and usage instructions, see [USAGE.md](USAGE.md).
 
-*Last Updated: 2026-01-01*
+*Last Updated: 2026-02-08*

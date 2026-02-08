@@ -11,7 +11,7 @@ interface ILexiconHolder {
         address _creator,
         string memory _query,
         bytes32 _corpusHash
-    ) external returns (string memory citation, uint256 confidence);
+    ) external view returns (string memory citation, uint256 confidence);
 }
 
 /**
