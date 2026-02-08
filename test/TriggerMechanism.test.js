@@ -469,4 +469,48 @@ describe("TriggerMechanism", function () {
       expect(await triggerMechanism.isVerificationPending(creator.address)).to.equal(false);
     });
   });
+
+  describe("Limit Enforcement", function () {
+    it("Should reject configuring quorum with more than MAX_TRUSTED_SIGNERS (20)", async function () {
+      const signers = [];
+      for (let i = 0; i < 21; i++) {
+        const wallet = ethers.Wallet.createRandom();
+        signers.push(wallet.address);
+      }
+
+      await expect(
+        triggerMechanism.connect(creator).configureTrustedQuorum(signers, 2)
+      ).to.be.revertedWith("Too many signers");
+    });
+
+    it("Should reject configuring oracle with more than MAX_ORACLES (10)", async function () {
+      const oracles = [];
+      for (let i = 0; i < 11; i++) {
+        const wallet = ethers.Wallet.createRandom();
+        oracles.push(wallet.address);
+      }
+
+      await expect(
+        triggerMechanism.connect(creator).configureOracleVerified(oracles)
+      ).to.be.revertedWith("Too many oracles");
+    });
+
+    it("Should reject submitOracleProof with empty proof data", async function () {
+      await triggerMechanism.connect(creator).configureOracleVerified([oracle1.address]);
+
+      await expect(
+        triggerMechanism.connect(oracle1).submitOracleProof(creator.address, "0x")
+      ).to.be.revertedWith("Proof data required");
+    });
+
+    it("Should reject check-in after deadman switch has triggered", async function () {
+      await triggerMechanism.connect(creator).configureDeadmanSwitch(NINETY_DAYS);
+      await time.increase(NINETY_DAYS + 1);
+      await triggerMechanism.executeDeadmanSwitch(creator.address);
+
+      await expect(
+        triggerMechanism.connect(creator).checkIn()
+      ).to.be.revertedWith("Already triggered");
+    });
+  });
 });

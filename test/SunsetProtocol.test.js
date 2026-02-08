@@ -142,6 +142,17 @@ describe("SunsetProtocol", function () {
         sunsetProtocol.connect(creator).initiateSunset(creator.address)
       ).to.be.revertedWithCustomError(sunsetProtocol, "AccessControlUnauthorizedAccount");
     });
+
+    it("Should initiate sunset at exactly TWENTY_YEARS boundary", async function () {
+      const triggerTimestamp = await executionAgent.triggerTimestamps(creator.address);
+      await time.increase(TWENTY_YEARS);
+
+      await sunsetProtocol.connect(operator).initiateSunset(creator.address);
+
+      const state = await sunsetProtocol.getSunsetState(creator.address);
+      expect(state.isSunset).to.equal(true);
+      expect(state.creator).to.equal(creator.address);
+    });
   });
 
   describe("Asset Archival", function () {
@@ -279,6 +290,21 @@ describe("SunsetProtocol", function () {
           [ethers.keccak256(ethers.toUtf8Bytes("Asset"))]
         )
       ).to.be.revertedWith("Array length mismatch");
+    });
+
+    it("Should reject batch exceeding MAX_ARCHIVE_BATCH_SIZE of 50", async function () {
+      const addresses = new Array(51).fill(creator2.address);
+      const uris = new Array(51).fill("ipfs://asset");
+      const hashes = new Array(51).fill(ethers.keccak256(ethers.toUtf8Bytes("Asset")));
+
+      await expect(
+        sunsetProtocol.connect(operator).archiveAssets(
+          creator.address,
+          addresses,
+          uris,
+          hashes
+        )
+      ).to.be.revertedWith("Batch size exceeds limit");
     });
   });
 
@@ -566,6 +592,47 @@ describe("SunsetProtocol", function () {
     it("Should return empty array for non-archived creator", async function () {
       const archives = await sunsetProtocol.getArchivedAssets(creator2.address);
       expect(archives.length).to.equal(0);
+    });
+  });
+
+  describe("Access Control", function () {
+    it("Should reject archiveAssets from non-operator", async function () {
+      await time.increase(TWENTY_YEARS + 1);
+      await sunsetProtocol.connect(operator).initiateSunset(creator.address);
+
+      await expect(
+        sunsetProtocol.connect(creator).archiveAssets(
+          creator.address,
+          [creator2.address],
+          ["ipfs://asset"],
+          [ethers.keccak256(ethers.toUtf8Bytes("Asset"))]
+        )
+      ).to.be.revertedWithCustomError(sunsetProtocol, "AccessControlUnauthorizedAccount");
+    });
+
+    it("Should reject finalizeArchive from non-operator", async function () {
+      await expect(
+        sunsetProtocol.connect(creator).finalizeArchive(creator.address)
+      ).to.be.revertedWithCustomError(sunsetProtocol, "AccessControlUnauthorizedAccount");
+    });
+
+    it("Should reject transitionIP from non-operator", async function () {
+      await expect(
+        sunsetProtocol.connect(creator).transitionIP(creator.address, 0)
+      ).to.be.revertedWithCustomError(sunsetProtocol, "AccessControlUnauthorizedAccount");
+    });
+
+    it("Should reject clusterLegacy from non-operator", async function () {
+      const clusterId = ethers.keccak256(ethers.toUtf8Bytes("TestCluster"));
+      await expect(
+        sunsetProtocol.connect(creator).clusterLegacy(creator.address, clusterId)
+      ).to.be.revertedWithCustomError(sunsetProtocol, "AccessControlUnauthorizedAccount");
+    });
+
+    it("Should reject completeSunset from non-operator", async function () {
+      await expect(
+        sunsetProtocol.connect(creator).completeSunset(creator.address)
+      ).to.be.revertedWithCustomError(sunsetProtocol, "AccessControlUnauthorizedAccount");
     });
   });
 });

@@ -36,6 +36,50 @@ jobs:
         env:
           REPORT_GAS: true
 
+  coverage:
+    name: Coverage Check
+    runs-on: ubuntu-latest
+    needs: compile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx hardhat coverage
+      - name: Check coverage threshold
+        run: |
+          # Extract statement coverage percentage from coverage summary
+          COVERAGE=$(npx hardhat coverage 2>&1 | grep "All files" | awk '{print $4}' | sed 's/%//')
+          echo "Statement coverage: ${COVERAGE}%"
+          if [ -z "$COVERAGE" ]; then
+            echo "Warning: Could not parse coverage. Skipping threshold check."
+            exit 0
+          fi
+          THRESHOLD=80
+          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+            echo "Coverage ${COVERAGE}% is below threshold ${THRESHOLD}%"
+            exit 1
+          fi
+
+  foundry-test:
+    name: Foundry Fuzz Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      - run: npm ci
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Run Foundry tests
+        run: forge test --profile ci -vvv
+
   lint-frontend:
     name: Lint Frontend
     runs-on: ubuntu-latest

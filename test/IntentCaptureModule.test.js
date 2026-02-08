@@ -560,4 +560,46 @@ describe("IntentCaptureModule", function () {
       ).to.be.revertedWith("Intent already triggered");
     });
   });
+
+  describe("Limit Enforcement", function () {
+    const intentHash = ethers.keccak256(ethers.toUtf8Bytes("Intent"));
+    const corpusHash = ethers.keccak256(ethers.toUtf8Bytes("Corpus"));
+
+    it("Should reject adding more than MAX_GOALS (50) goals", async function () {
+      await intentModule.connect(creator).captureIntent(
+        intentHash,
+        corpusHash,
+        "ipfs://corpus",
+        "ipfs://assets",
+        2020,
+        2025,
+        [await ipToken.getAddress()]
+      );
+
+      const constraintsHash = ethers.keccak256(ethers.toUtf8Bytes("Constraints"));
+      for (let i = 0; i < 50; i++) {
+        await intentModule.connect(creator).addGoal(`Goal ${i}`, constraintsHash, 50);
+      }
+
+      await expect(
+        intentModule.connect(creator).addGoal("Goal 51", constraintsHash, 50)
+      ).to.be.revertedWith("Maximum goals reached");
+    });
+
+    it("Should reject capturing intent with more than MAX_ASSETS (100) addresses", async function () {
+      const assets = new Array(101).fill(await ipToken.getAddress());
+
+      await expect(
+        intentModule.connect(creator).captureIntent(
+          intentHash,
+          corpusHash,
+          "ipfs://corpus",
+          "ipfs://assets",
+          2020,
+          2025,
+          assets
+        )
+      ).to.be.revertedWith("Too many assets");
+    });
+  });
 });

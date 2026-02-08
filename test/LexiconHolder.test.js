@@ -556,4 +556,47 @@ describe("LexiconHolder", function () {
       expect(await lexiconHolder.getLegacyCluster(creator.address)).to.equal(ethers.ZeroHash);
     });
   });
+
+  describe("Limit Enforcement", function () {
+    const corpusHash = ethers.keccak256(ethers.toUtf8Bytes("Corpus"));
+
+    beforeEach(async function () {
+      await lexiconHolder.connect(indexer).freezeCorpus(
+        creator.address,
+        corpusHash,
+        "ipfs://corpus",
+        2020,
+        2025
+      );
+    });
+
+    it("Should reject semantic index with more than MAX_CITATIONS_PER_INDEX (100) citations", async function () {
+      const citations = new Array(101).fill("Citation");
+      const scores = new Array(101).fill(80);
+
+      await expect(
+        lexiconHolder.connect(indexer).createSemanticIndex(
+          creator.address,
+          "keyword",
+          citations,
+          scores
+        )
+      ).to.be.revertedWith("Too many citations");
+    });
+
+    it("Should reject batch creation exceeding MAX_BATCH_SIZE (50)", async function () {
+      const keywords = new Array(51).fill("keyword").map((k, i) => `${k}${i}`);
+      const citationsArray = new Array(51).fill(["Citation"]);
+      const scoresArray = new Array(51).fill([80]);
+
+      await expect(
+        lexiconHolder.connect(indexer).batchCreateIndices(
+          creator.address,
+          keywords,
+          citationsArray,
+          scoresArray
+        )
+      ).to.be.revertedWith("Batch size exceeds limit");
+    });
+  });
 });
