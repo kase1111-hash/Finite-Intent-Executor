@@ -1,0 +1,20 @@
+{
+  "name": "@fie/indexer-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Off-chain semantic indexer for Finite Intent Executor",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "ethers": "^6.13.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "ts-node": "^10.9.0",
+    "@types/node": "^20.0.0"
+  }
+}
