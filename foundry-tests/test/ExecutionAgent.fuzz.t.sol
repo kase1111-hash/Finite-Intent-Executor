@@ -86,15 +86,22 @@ contract ExecutionAgentFuzzTest is Test {
         vm.prank(executor);
         executionAgent.activateExecution(creator);
 
+        // Create semantic index for revenue distribution
+        string[] memory citations = new string[](1);
+        citations[0] = "Distribute revenue per intent";
+        uint256[] memory scores = new uint256[](1);
+        scores[0] = 97;
+        lexiconHolder.createSemanticIndex(creator, "distribute_revenue:Royalty payment", citations, scores);
+
         if (distributeAmount > treasuryAmount) {
             vm.prank(executor);
             vm.expectRevert("Insufficient treasury funds");
-            executionAgent.distributeRevenue(creator, recipient, distributeAmount);
+            executionAgent.distributeRevenue(creator, recipient, distributeAmount, "Royalty payment", corpusHash);
         } else {
             uint256 recipientBalanceBefore = recipient.balance;
 
             vm.prank(executor);
-            executionAgent.distributeRevenue(creator, recipient, distributeAmount);
+            executionAgent.distributeRevenue(creator, recipient, distributeAmount, "Royalty payment", corpusHash);
 
             assertEq(executionAgent.treasuries(creator), treasuryAmount - distributeAmount);
             assertEq(recipient.balance, recipientBalanceBefore + distributeAmount);

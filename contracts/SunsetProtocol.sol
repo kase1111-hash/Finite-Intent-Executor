@@ -30,7 +30,7 @@ interface ILexiconHolder {
  * @custom:invariant isSunset state can only transition false -> true (irreversible)
  * @custom:invariant assetsArchived state can only transition false -> true (irreversible)
  * @custom:invariant ipTransitioned state can only transition false -> true (irreversible)
- * @custom:invariant Workflow order: sunset -> archive -> transition -> cluster
+ * @custom:invariant Workflow order: sunset -> archive (repeatable) -> finalize -> transition -> cluster
  * @custom:invariant Default license type is CC0 (public domain)
  * @custom:invariant emergencySunset accessible to anyone after 20 years
  */
@@ -97,21 +97,14 @@ contract SunsetProtocol is AccessControl {
     /**
      * @dev Initiates sunset protocol when 20 years have passed
      * @param _creator Address of the intent creator
-     * @param _triggerTimestamp When execution was triggered
-     * @notice Validates the provided timestamp against ExecutionAgent to prevent spoofing.
+     * @notice Reads trigger timestamp directly from ExecutionAgent (source of truth).
      *         Prefer using this function over emergencySunset() when operating as SUNSET_OPERATOR.
      */
     function initiateSunset(
-        address _creator,
-        uint256 _triggerTimestamp
+        address _creator
     ) external onlyRole(SUNSET_OPERATOR_ROLE) {
-        // Validate trigger timestamp against ExecutionAgent to prevent spoofing
         uint256 actualTriggerTimestamp = executionAgent.triggerTimestamps(_creator);
         require(actualTriggerTimestamp > 0, "Execution not activated for creator");
-        require(
-            _triggerTimestamp == actualTriggerTimestamp,
-            "Trigger timestamp does not match ExecutionAgent"
-        );
         require(
             block.timestamp >= actualTriggerTimestamp + SUNSET_DURATION,
             "20 year duration not elapsed"
@@ -138,7 +131,9 @@ contract SunsetProtocol is AccessControl {
     }
 
     /**
-     * @dev Archives assets to permanent decentralized storage
+     * @dev Archives a batch of assets to permanent decentralized storage.
+     * Can be called multiple times to archive more than MAX_ARCHIVE_BATCH_SIZE assets.
+     * Call finalizeArchive() after all batches are archived to mark archival as complete.
      * @param _creator Intent creator
      * @param _assetAddresses Addresses of assets to archive
      * @param _storageURIs Decentralized storage URIs for each asset
@@ -151,7 +146,7 @@ contract SunsetProtocol is AccessControl {
         bytes32[] memory _assetHashes
     ) external onlyRole(SUNSET_OPERATOR_ROLE) {
         require(sunsetStates[_creator].isSunset, "Sunset not initiated");
-        require(!sunsetStates[_creator].assetsArchived, "Assets already archived");
+        require(!sunsetStates[_creator].assetsArchived, "Assets already finalized");
         require(
             _assetAddresses.length == _storageURIs.length &&
             _assetAddresses.length == _assetHashes.length,
@@ -170,10 +165,23 @@ contract SunsetProtocol is AccessControl {
             archivedAssets[_creator].push(archive);
         }
 
+        emit AssetsArchived(_creator, _assetAddresses.length, _buildArchiveURI(_creator));
+    }
+
+    /**
+     * @dev Finalizes the archival process after all batches have been archived.
+     * Must be called after all archiveAssets() batches are complete.
+     * @param _creator Intent creator
+     */
+    function finalizeArchive(
+        address _creator
+    ) external onlyRole(SUNSET_OPERATOR_ROLE) {
+        require(sunsetStates[_creator].isSunset, "Sunset not initiated");
+        require(!sunsetStates[_creator].assetsArchived, "Assets already finalized");
+        require(archivedAssets[_creator].length > 0, "No assets archived");
+
         sunsetStates[_creator].assetsArchived = true;
         sunsetStates[_creator].archiveURI = _buildArchiveURI(_creator);
-
-        emit AssetsArchived(_creator, _assetAddresses.length, sunsetStates[_creator].archiveURI);
     }
 
     /**
@@ -234,15 +242,14 @@ contract SunsetProtocol is AccessControl {
     /**
      * @dev Checks if sunset is due for a creator
      * @param _creator Intent creator
-     * @param _triggerTimestamp When execution was triggered
      */
     function isSunsetDue(
-        address _creator,
-        uint256 _triggerTimestamp
+        address _creator
     ) external view returns (bool) {
         if (sunsetStates[_creator].isSunset) return false;
-        if (_triggerTimestamp == 0) return false;
-        return block.timestamp >= _triggerTimestamp + SUNSET_DURATION;
+        uint256 triggerTs = executionAgent.triggerTimestamps(_creator);
+        if (triggerTs == 0) return false;
+        return block.timestamp >= triggerTs + SUNSET_DURATION;
     }
 
     /**

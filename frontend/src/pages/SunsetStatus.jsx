@@ -65,14 +65,9 @@ function SunsetStatus() {
   }, [fetchSunsetData])
 
   const handleInitiateSunset = async () => {
-    if (!triggerTimestamp) {
-      toast.error('No trigger timestamp found')
-      return
-    }
-
     setSubmitting(true)
     try {
-      const tx = await contracts.SunsetProtocol.initiateSunset(account, triggerTimestamp)
+      const tx = await contracts.SunsetProtocol.initiateSunset(account)
       toast.loading('Initiating sunset...', { id: 'sunset' })
       await tx.wait()
       toast.success('Sunset initiated!', { id: 'sunset' })

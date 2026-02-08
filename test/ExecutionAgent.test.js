@@ -454,19 +454,30 @@ describe("ExecutionAgent", function () {
 
   describe("Revenue Distribution", function () {
     const distributionAmount = ethers.parseEther("0.5");
+    const corpusHash = ethers.keccak256(ethers.toUtf8Bytes("Corpus"));
 
     beforeEach(async function () {
       await executionAgent.connect(executor).activateExecution(creator.address);
       await executionAgent.depositToTreasury(creator.address, { value: ethers.parseEther("1.0") });
+
+      // Create semantic index for revenue distribution verification
+      await lexiconHolder.createSemanticIndex(
+        creator.address,
+        "distribute_revenue:Royalty payments",
+        ["Distribute royalties to collaborators"],
+        [97]
+      );
     });
 
-    it("Should distribute revenue successfully", async function () {
+    it("Should distribute revenue successfully with corpus verification", async function () {
       const recipientBalanceBefore = await ethers.provider.getBalance(recipient.address);
 
       await executionAgent.connect(executor).distributeRevenue(
         creator.address,
         recipient.address,
-        distributionAmount
+        distributionAmount,
+        "Royalty payments",
+        corpusHash
       );
 
       const recipientBalanceAfter = await ethers.provider.getBalance(recipient.address);
@@ -478,10 +489,28 @@ describe("ExecutionAgent", function () {
         executionAgent.connect(executor).distributeRevenue(
           creator.address,
           recipient.address,
-          distributionAmount
+          distributionAmount,
+          "Royalty payments",
+          corpusHash
         )
       ).to.emit(executionAgent, "RevenueDistributed")
         .withArgs(creator.address, recipient.address, distributionAmount);
+    });
+
+    it("Should default to inaction when corpus confidence is low", async function () {
+      // Use a description that has no semantic index (confidence = 0)
+      await expect(
+        executionAgent.connect(executor).distributeRevenue(
+          creator.address,
+          recipient.address,
+          distributionAmount,
+          "Unknown distribution reason",
+          corpusHash
+        )
+      ).to.emit(executionAgent, "InactionDefault");
+
+      // Treasury should remain unchanged
+      expect(await executionAgent.treasuries(creator.address)).to.equal(ethers.parseEther("1.0"));
     });
 
     it("Should reject insufficient funds", async function () {
@@ -489,7 +518,9 @@ describe("ExecutionAgent", function () {
         executionAgent.connect(executor).distributeRevenue(
           creator.address,
           recipient.address,
-          ethers.parseEther("5.0")
+          ethers.parseEther("5.0"),
+          "Royalty payments",
+          corpusHash
         )
       ).to.be.revertedWith("Insufficient treasury funds");
     });
@@ -539,6 +570,7 @@ describe("ExecutionAgent", function () {
     });
 
     it("Should prevent actions after sunset", async function () {
+      const corpusHash = ethers.keccak256(ethers.toUtf8Bytes("Corpus"));
       await executionAgent.connect(executor).activateExecution(creator.address);
       await executionAgent.depositToTreasury(creator.address, { value: ethers.parseEther("1.0") });
       await time.increase(TWENTY_YEARS + 1);
@@ -548,7 +580,9 @@ describe("ExecutionAgent", function () {
         executionAgent.connect(executor).distributeRevenue(
           creator.address,
           recipient.address,
-          ethers.parseEther("0.1")
+          ethers.parseEther("0.1"),
+          "Test distribution",
+          corpusHash
         )
       ).to.be.revertedWith("Execution not active or sunset");
     });

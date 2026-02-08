@@ -80,7 +80,7 @@ describe("SunsetProtocol", function () {
       const triggerTimestamp = await executionAgent.triggerTimestamps(creator.address);
       await time.increase(TWENTY_YEARS + 1);
 
-      await sunsetProtocol.connect(operator).initiateSunset(creator.address, triggerTimestamp);
+      await sunsetProtocol.connect(operator).initiateSunset(creator.address);
 
       const state = await sunsetProtocol.getSunsetState(creator.address);
       expect(state.isSunset).to.equal(true);
@@ -93,7 +93,7 @@ describe("SunsetProtocol", function () {
       await time.increase(TWENTY_YEARS + 1);
 
       await expect(
-        sunsetProtocol.connect(operator).initiateSunset(creator.address, triggerTimestamp)
+        sunsetProtocol.connect(operator).initiateSunset(creator.address)
       ).to.emit(sunsetProtocol, "SunsetInitiated")
         .and.to.emit(sunsetProtocol, "ExecutionHalted");
     });
@@ -102,7 +102,7 @@ describe("SunsetProtocol", function () {
       const triggerTimestamp = await executionAgent.triggerTimestamps(creator.address);
       await time.increase(TWENTY_YEARS + 1);
 
-      await sunsetProtocol.connect(operator).initiateSunset(creator.address, triggerTimestamp);
+      await sunsetProtocol.connect(operator).initiateSunset(creator.address);
 
       expect(await executionAgent.isSunset(creator.address)).to.equal(true);
       expect(await executionAgent.isExecutionActive(creator.address)).to.equal(false);
@@ -113,24 +113,24 @@ describe("SunsetProtocol", function () {
       await time.increase(TWENTY_YEARS - 1000);
 
       await expect(
-        sunsetProtocol.connect(operator).initiateSunset(creator.address, triggerTimestamp)
+        sunsetProtocol.connect(operator).initiateSunset(creator.address)
       ).to.be.revertedWith("20 year duration not elapsed");
     });
 
-    it("Should reject mismatched trigger timestamp", async function () {
+    it("Should reject sunset for non-activated creator", async function () {
       await expect(
-        sunsetProtocol.connect(operator).initiateSunset(creator.address, 0)
-      ).to.be.revertedWith("Trigger timestamp does not match ExecutionAgent");
+        sunsetProtocol.connect(operator).initiateSunset(creator2.address)
+      ).to.be.revertedWith("Execution not activated for creator");
     });
 
     it("Should reject double sunset initiation", async function () {
       const triggerTimestamp = await executionAgent.triggerTimestamps(creator.address);
       await time.increase(TWENTY_YEARS + 1);
 
-      await sunsetProtocol.connect(operator).initiateSunset(creator.address, triggerTimestamp);
+      await sunsetProtocol.connect(operator).initiateSunset(creator.address);
 
       await expect(
-        sunsetProtocol.connect(operator).initiateSunset(creator.address, triggerTimestamp)
+        sunsetProtocol.connect(operator).initiateSunset(creator.address)
       ).to.be.revertedWith("Sunset already initiated");
     });
 
@@ -139,7 +139,7 @@ describe("SunsetProtocol", function () {
       await time.increase(TWENTY_YEARS + 1);
 
       await expect(
-        sunsetProtocol.connect(creator).initiateSunset(creator.address, triggerTimestamp)
+        sunsetProtocol.connect(creator).initiateSunset(creator.address)
       ).to.be.revertedWithCustomError(sunsetProtocol, "AccessControlUnauthorizedAccount");
     });
   });
@@ -148,7 +148,7 @@ describe("SunsetProtocol", function () {
     beforeEach(async function () {
       const triggerTimestamp = await executionAgent.triggerTimestamps(creator.address);
       await time.increase(TWENTY_YEARS + 1);
-      await sunsetProtocol.connect(operator).initiateSunset(creator.address, triggerTimestamp);
+      await sunsetProtocol.connect(operator).initiateSunset(creator.address);
     });
 
     it("Should archive assets successfully", async function () {
@@ -166,12 +166,44 @@ describe("SunsetProtocol", function () {
         assetHashes
       );
 
-      const state = await sunsetProtocol.getSunsetState(creator.address);
-      expect(state.assetsArchived).to.equal(true);
-
       const archives = await sunsetProtocol.getArchivedAssets(creator.address);
       expect(archives.length).to.equal(2);
       expect(archives[0].storageURI).to.equal("ipfs://asset1");
+
+      // assetsArchived not yet true until finalizeArchive
+      const state = await sunsetProtocol.getSunsetState(creator.address);
+      expect(state.assetsArchived).to.equal(false);
+    });
+
+    it("Should allow multiple archive batches before finalization", async function () {
+      await sunsetProtocol.connect(operator).archiveAssets(
+        creator.address,
+        [creator2.address],
+        ["ipfs://asset1"],
+        [ethers.keccak256(ethers.toUtf8Bytes("Asset1"))]
+      );
+      await sunsetProtocol.connect(operator).archiveAssets(
+        creator.address,
+        [operator.address],
+        ["ipfs://asset2"],
+        [ethers.keccak256(ethers.toUtf8Bytes("Asset2"))]
+      );
+
+      const archives = await sunsetProtocol.getArchivedAssets(creator.address);
+      expect(archives.length).to.equal(2);
+    });
+
+    it("Should finalize archive and set assetsArchived", async function () {
+      await sunsetProtocol.connect(operator).archiveAssets(
+        creator.address,
+        [creator2.address],
+        ["ipfs://asset"],
+        [ethers.keccak256(ethers.toUtf8Bytes("Asset"))]
+      );
+      await sunsetProtocol.connect(operator).finalizeArchive(creator.address);
+
+      const state = await sunsetProtocol.getSunsetState(creator.address);
+      expect(state.assetsArchived).to.equal(true);
     });
 
     it("Should emit AssetsArchived event", async function () {
@@ -199,13 +231,28 @@ describe("SunsetProtocol", function () {
       ).to.be.revertedWith("Sunset not initiated");
     });
 
-    it("Should reject double archival", async function () {
+    it("Should reject double finalization", async function () {
       await sunsetProtocol.connect(operator).archiveAssets(
         creator.address,
         [creator2.address],
         ["ipfs://asset"],
         [ethers.keccak256(ethers.toUtf8Bytes("Asset"))]
       );
+      await sunsetProtocol.connect(operator).finalizeArchive(creator.address);
+
+      await expect(
+        sunsetProtocol.connect(operator).finalizeArchive(creator.address)
+      ).to.be.revertedWith("Assets already finalized");
+    });
+
+    it("Should reject archival after finalization", async function () {
+      await sunsetProtocol.connect(operator).archiveAssets(
+        creator.address,
+        [creator2.address],
+        ["ipfs://asset"],
+        [ethers.keccak256(ethers.toUtf8Bytes("Asset"))]
+      );
+      await sunsetProtocol.connect(operator).finalizeArchive(creator.address);
 
       await expect(
         sunsetProtocol.connect(operator).archiveAssets(
@@ -214,7 +261,13 @@ describe("SunsetProtocol", function () {
           ["ipfs://asset2"],
           [ethers.keccak256(ethers.toUtf8Bytes("Asset2"))]
         )
-      ).to.be.revertedWith("Assets already archived");
+      ).to.be.revertedWith("Assets already finalized");
+    });
+
+    it("Should reject finalization with no assets", async function () {
+      await expect(
+        sunsetProtocol.connect(operator).finalizeArchive(creator.address)
+      ).to.be.revertedWith("No assets archived");
     });
 
     it("Should reject array length mismatch", async function () {
@@ -231,15 +284,15 @@ describe("SunsetProtocol", function () {
 
   describe("IP Transition", function () {
     beforeEach(async function () {
-      const triggerTimestamp = await executionAgent.triggerTimestamps(creator.address);
       await time.increase(TWENTY_YEARS + 1);
-      await sunsetProtocol.connect(operator).initiateSunset(creator.address, triggerTimestamp);
+      await sunsetProtocol.connect(operator).initiateSunset(creator.address);
       await sunsetProtocol.connect(operator).archiveAssets(
         creator.address,
         [creator2.address],
         ["ipfs://asset"],
         [ethers.keccak256(ethers.toUtf8Bytes("Asset"))]
       );
+      await sunsetProtocol.connect(operator).finalizeArchive(creator.address);
     });
 
     it("Should transition IP to CC0", async function () {
@@ -270,8 +323,8 @@ describe("SunsetProtocol", function () {
       ).to.emit(sunsetProtocol, "IPTransitioned");
     });
 
-    it("Should reject transition before archival", async function () {
-      // Setup another creator with sunset but no archival
+    it("Should reject transition before archival finalization", async function () {
+      // Setup another creator with sunset but no finalized archival
       await lexiconHolder.freezeCorpus(
         creator2.address,
         ethers.keccak256(ethers.toUtf8Bytes("Corpus2")),
@@ -280,9 +333,8 @@ describe("SunsetProtocol", function () {
         2025
       );
       await executionAgent.connect(operator).activateExecution(creator2.address);
-      const triggerTs = await executionAgent.triggerTimestamps(creator2.address);
       await time.increase(TWENTY_YEARS + 1);
-      await sunsetProtocol.connect(operator).initiateSunset(creator2.address, triggerTs);
+      await sunsetProtocol.connect(operator).initiateSunset(creator2.address);
 
       await expect(
         sunsetProtocol.connect(operator).transitionIP(creator2.address, 0)
@@ -302,15 +354,15 @@ describe("SunsetProtocol", function () {
     const clusterId = ethers.keccak256(ethers.toUtf8Bytes("OpenSourceCluster"));
 
     beforeEach(async function () {
-      const triggerTimestamp = await executionAgent.triggerTimestamps(creator.address);
       await time.increase(TWENTY_YEARS + 1);
-      await sunsetProtocol.connect(operator).initiateSunset(creator.address, triggerTimestamp);
+      await sunsetProtocol.connect(operator).initiateSunset(creator.address);
       await sunsetProtocol.connect(operator).archiveAssets(
         creator.address,
         [creator2.address],
         ["ipfs://asset"],
         [ethers.keccak256(ethers.toUtf8Bytes("Asset"))]
       );
+      await sunsetProtocol.connect(operator).finalizeArchive(creator.address);
       await sunsetProtocol.connect(operator).transitionIP(creator.address, 0);
 
       // Create cluster in lexicon holder
@@ -341,15 +393,15 @@ describe("SunsetProtocol", function () {
         2025
       );
       await executionAgent.connect(operator).activateExecution(creator2.address);
-      const triggerTs = await executionAgent.triggerTimestamps(creator2.address);
       await time.increase(TWENTY_YEARS + 1);
-      await sunsetProtocol.connect(operator).initiateSunset(creator2.address, triggerTs);
+      await sunsetProtocol.connect(operator).initiateSunset(creator2.address);
       await sunsetProtocol.connect(operator).archiveAssets(
         creator2.address,
         [owner.address],
         ["ipfs://asset2"],
         [ethers.keccak256(ethers.toUtf8Bytes("Asset2"))]
       );
+      await sunsetProtocol.connect(operator).finalizeArchive(creator2.address);
 
       await expect(
         sunsetProtocol.connect(operator).clusterLegacy(creator2.address, clusterId)
@@ -372,15 +424,15 @@ describe("SunsetProtocol", function () {
     const clusterId = ethers.keccak256(ethers.toUtf8Bytes("Cluster"));
 
     beforeEach(async function () {
-      const triggerTimestamp = await executionAgent.triggerTimestamps(creator.address);
       await time.increase(TWENTY_YEARS + 1);
-      await sunsetProtocol.connect(operator).initiateSunset(creator.address, triggerTimestamp);
+      await sunsetProtocol.connect(operator).initiateSunset(creator.address);
       await sunsetProtocol.connect(operator).archiveAssets(
         creator.address,
         [creator2.address],
         ["ipfs://asset"],
         [ethers.keccak256(ethers.toUtf8Bytes("Asset"))]
       );
+      await sunsetProtocol.connect(operator).finalizeArchive(creator.address);
       await sunsetProtocol.connect(operator).transitionIP(creator.address, 0);
 
       await lexiconHolder.createCluster(clusterId, "Test Cluster");
@@ -403,15 +455,15 @@ describe("SunsetProtocol", function () {
         2025
       );
       await executionAgent.connect(operator).activateExecution(creator2.address);
-      const triggerTs = await executionAgent.triggerTimestamps(creator2.address);
       await time.increase(TWENTY_YEARS + 1);
-      await sunsetProtocol.connect(operator).initiateSunset(creator2.address, triggerTs);
+      await sunsetProtocol.connect(operator).initiateSunset(creator2.address);
       await sunsetProtocol.connect(operator).archiveAssets(
         creator2.address,
         [owner.address],
         ["ipfs://asset2"],
         [ethers.keccak256(ethers.toUtf8Bytes("Asset2"))]
       );
+      await sunsetProtocol.connect(operator).finalizeArchive(creator2.address);
       await sunsetProtocol.connect(operator).transitionIP(creator2.address, 0);
 
       await expect(
@@ -456,10 +508,9 @@ describe("SunsetProtocol", function () {
     });
 
     it("Should reject if already sunset", async function () {
-      const triggerTimestamp = await executionAgent.triggerTimestamps(creator.address);
       await time.increase(TWENTY_YEARS + 1);
 
-      await sunsetProtocol.connect(operator).initiateSunset(creator.address, triggerTimestamp);
+      await sunsetProtocol.connect(operator).initiateSunset(creator.address);
 
       await expect(
         sunsetProtocol.connect(creator2).emergencySunset(creator.address)
@@ -469,29 +520,26 @@ describe("SunsetProtocol", function () {
 
   describe("Sunset Due Check", function () {
     it("Should return true when sunset is due", async function () {
-      const triggerTimestamp = await executionAgent.triggerTimestamps(creator.address);
       await time.increase(TWENTY_YEARS + 1);
 
-      expect(await sunsetProtocol.isSunsetDue(creator.address, triggerTimestamp)).to.equal(true);
+      expect(await sunsetProtocol.isSunsetDue(creator.address)).to.equal(true);
     });
 
     it("Should return false when sunset not yet due", async function () {
-      const triggerTimestamp = await executionAgent.triggerTimestamps(creator.address);
       await time.increase(TWENTY_YEARS - 1000);
 
-      expect(await sunsetProtocol.isSunsetDue(creator.address, triggerTimestamp)).to.equal(false);
+      expect(await sunsetProtocol.isSunsetDue(creator.address)).to.equal(false);
     });
 
-    it("Should return false for zero trigger timestamp", async function () {
-      expect(await sunsetProtocol.isSunsetDue(creator.address, 0)).to.equal(false);
+    it("Should return false for non-activated creator", async function () {
+      expect(await sunsetProtocol.isSunsetDue(creator2.address)).to.equal(false);
     });
 
     it("Should return false if already sunset", async function () {
-      const triggerTimestamp = await executionAgent.triggerTimestamps(creator.address);
       await time.increase(TWENTY_YEARS + 1);
-      await sunsetProtocol.connect(operator).initiateSunset(creator.address, triggerTimestamp);
+      await sunsetProtocol.connect(operator).initiateSunset(creator.address);
 
-      expect(await sunsetProtocol.isSunsetDue(creator.address, triggerTimestamp)).to.equal(false);
+      expect(await sunsetProtocol.isSunsetDue(creator.address)).to.equal(false);
     });
   });
 
@@ -502,9 +550,8 @@ describe("SunsetProtocol", function () {
     });
 
     it("Should return archived assets", async function () {
-      const triggerTimestamp = await executionAgent.triggerTimestamps(creator.address);
       await time.increase(TWENTY_YEARS + 1);
-      await sunsetProtocol.connect(operator).initiateSunset(creator.address, triggerTimestamp);
+      await sunsetProtocol.connect(operator).initiateSunset(creator.address);
       await sunsetProtocol.connect(operator).archiveAssets(
         creator.address,
         [creator2.address],
