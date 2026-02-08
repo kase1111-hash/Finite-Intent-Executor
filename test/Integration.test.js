@@ -182,7 +182,7 @@ describe("Integration Tests - Full Lifecycle", function () {
       const triggerTimestamp = await executionAgent.triggerTimestamps(creator.address);
 
       // Initiate sunset
-      await sunsetProtocol.initiateSunset(creator.address, triggerTimestamp);
+      await sunsetProtocol.initiateSunset(creator.address);
       expect(await executionAgent.isExecutionActive(creator.address)).to.equal(false);
 
       // Archive assets
@@ -192,6 +192,7 @@ describe("Integration Tests - Full Lifecycle", function () {
         ["ipfs://archived-asset"],
         [contentHash]
       );
+      await sunsetProtocol.finalizeArchive(creator.address);
 
       // Transition IP to public domain
       await sunsetProtocol.transitionIP(creator.address, 0); // CC0
@@ -239,7 +240,7 @@ describe("Integration Tests - Full Lifecycle", function () {
 
       await lexiconHolder.createSemanticIndex(
         creator.address,
-        "distribute_funds",
+        "distribute_revenue:Distribute remaining funds",
         ["Distribute remaining funds to charities"],
         [96]
       );
@@ -270,7 +271,9 @@ describe("Integration Tests - Full Lifecycle", function () {
       await executionAgent.distributeRevenue(
         creator.address,
         recipient.address,
-        ethers.parseEther("1.0")
+        ethers.parseEther("1.0"),
+        "Distribute remaining funds",
+        corpusHash
       );
 
       expect(await executionAgent.treasuries(creator.address)).to.equal(

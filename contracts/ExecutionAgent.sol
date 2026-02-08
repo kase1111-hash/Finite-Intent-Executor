@@ -17,9 +17,9 @@ interface ILexiconHolder {
 /**
  * @title ExecutionAgent
  * @author Finite Intent Executor
- * @dev Narrow, scope-bounded AI executor with strict interpretation rules
+ * @dev Narrow, scope-bounded executor with strict interpretation rules
  * Capabilities: License assets, collect/distribute revenue, fund projects, enforce constraints
- * All ambiguous terms resolved via RAG against frozen contextual corpus
+ * All ambiguous terms resolved against frozen contextual corpus via LexiconHolder
  * Defaults to inaction if confidence < 95%
  *
  * @custom:security-contact security@finiteintent.example
@@ -308,14 +308,30 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
      * @param _creator Intent creator
      * @param _recipient Revenue recipient
      * @param _amount Amount to distribute
+     * @param _description Description of the distribution for corpus verification
+     * @param _corpusHash Corpus hash for verification
      */
     function distributeRevenue(
         address _creator,
         address _recipient,
-        uint256 _amount
+        uint256 _amount,
+        string memory _description,
+        bytes32 _corpusHash
     ) external onlyRole(EXECUTOR_ROLE) nonReentrant {
         require(isExecutionActive(_creator), "Execution not active or sunset");
         require(treasuries[_creator] >= _amount, "Insufficient treasury funds");
+
+        // Verify distribution alignment with intent
+        (string memory citation, uint256 confidence) = lexiconHolder.resolveAmbiguity(
+            _creator,
+            string(abi.encodePacked("distribute_revenue:", _description)),
+            _corpusHash
+        );
+
+        if (confidence < CONFIDENCE_THRESHOLD) {
+            emit InactionDefault(_creator, "Revenue distribution confidence too low", confidence);
+            return;
+        }
 
         // Effects first (state changes before external call)
         treasuries[_creator] -= _amount;

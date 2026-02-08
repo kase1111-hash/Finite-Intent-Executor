@@ -251,6 +251,13 @@ describe("Gas Benchmarking", function () {
         ["License assets per intent"],
         [98]
       );
+
+      await lexiconHolder.createSemanticIndex(
+        signer2.address,
+        "distribute_revenue:Royalty distribution",
+        ["Distribute royalties per intent"],
+        [97]
+      );
     });
 
     it("Activate Execution", async function () {
@@ -291,7 +298,9 @@ describe("Gas Benchmarking", function () {
       const tx = await executionAgent.distributeRevenue(
         signer2.address,
         recipient.address,
-        ethers.parseEther("0.1")
+        ethers.parseEther("0.1"),
+        "Royalty distribution",
+        corpusHash
       );
       await logGas("4. Execution Operations", "distributeRevenue", tx);
     });
@@ -427,10 +436,9 @@ describe("Gas Benchmarking", function () {
     });
 
     it("Initiate Sunset", async function () {
-      const triggerTimestamp = await executionAgent.triggerTimestamps(sunsetCreator.address);
       await time.increase(TWENTY_YEARS + 1);
 
-      const tx = await sunsetProtocol.initiateSunset(sunsetCreator.address, triggerTimestamp);
+      const tx = await sunsetProtocol.initiateSunset(sunsetCreator.address);
       await logGas("7. Sunset Operations", "initiateSunset", tx);
     });
 
@@ -442,6 +450,11 @@ describe("Gas Benchmarking", function () {
         [ethers.keccak256(ethers.toUtf8Bytes("Asset"))]
       );
       await logGas("7. Sunset Operations", "archiveAssets (1 asset)", tx);
+    });
+
+    it("Finalize Archive", async function () {
+      const tx = await sunsetProtocol.finalizeArchive(sunsetCreator.address);
+      await logGas("7. Sunset Operations", "finalizeArchive", tx);
     });
 
     it("Transition IP", async function () {
