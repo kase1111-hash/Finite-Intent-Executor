@@ -15,8 +15,7 @@
     "node": "hardhat node",
     "verify": "hardhat verify",
     "size": "REPORT_SIZE=true hardhat compile",
-    "clean": "hardhat clean",
-    "suggest-license": "python3 scripts/license_suggester.py"
+    "clean": "hardhat clean"
   },
   "keywords": [
     "blockchain",

@@ -28,32 +28,6 @@ Whether you need **blockchain will execution**, **automated digital legacy** man
 
 ## Quick Start
 
-### Windows (Easy Setup)
-
-**Double-click `setup.bat`** or run in PowerShell:
-
-```powershell
-.\setup.ps1
-```
-
-This will:
-- Check prerequisites (Node.js 18+)
-- Install all dependencies
-- Compile smart contracts
-- Set up the frontend
-
-**After setup, use these helper scripts:**
-
-| Script | Description |
-|--------|-------------|
-| `dev.bat` | Start full development environment (recommended) |
-| `start-node.bat` | Start Hardhat blockchain node |
-| `start-frontend.bat` | Start React frontend dev server |
-| `deploy.bat` | Deploy contracts to local network |
-| `run-tests.bat` | Run smart contract tests |
-
-### Linux/macOS
-
 ```bash
 # Install dependencies
 npm install
@@ -73,7 +47,6 @@ npm run deploy        # Terminal 2
 
 - **Node.js 18+** - [Download](https://nodejs.org)
 - **Git** (optional) - For version control
-- **Python 3** (optional) - For license suggester tool
 
 ## Features
 
@@ -86,30 +59,7 @@ npm run deploy        # Terminal 2
 - **Semantic Clustering**: Post-sunset grouping for cultural discoverability
 - **No Political Agency**: Hard-coded prohibition on political activities
 - **Full Auditability**: All decisions logged on-chain with corpus citations
-- **Security Integration**: Boundary-SIEM and Boundary-Daemon connectivity for enterprise security
 - **Comprehensive Testing**: Unit, integration, fuzzing, and formal verification support
-- **License Suggester** *(Optional)*: AI-powered tool to suggest appropriate licenses before tokenizing IP
-
-## Optional Tools
-
-### License Suggester
-
-An **optional helper tool** that uses local AI (Ollama) to suggest appropriate licenses for your intellectual property before minting it as an ERC721 token on the blockchain.
-
-```bash
-# Quick start (requires Ollama + Python)
-ollama pull llama3.2
-pip install -r requirements.txt
-npm run suggest-license -- path/to/your/file.txt
-```
-
-**Features**:
-- Analyzes code, text, art, music, and other IP
-- Suggests licenses compatible with blockchain and 20-year sunset
-- Completely private (runs locally)
-- Optional - provides suggestions only, not legal advice
-
-See **[LICENSE_SUGGESTER.md](LICENSE_SUGGESTER.md)** for detailed setup and usage.
 
 ## Documentation
 
@@ -142,7 +92,7 @@ See **[LICENSE_SUGGESTER.md](LICENSE_SUGGESTER.md)** for detailed setup and usag
 | Document | Description |
 |----------|-------------|
 | **[CHANGELOG.md](CHANGELOG.md)** | Version history and release notes |
-| **[LICENSE_SUGGESTER.md](LICENSE_SUGGESTER.md)** | Optional AI-powered license suggestion tool |
+| **[REFOCUS_PLAN.md](REFOCUS_PLAN.md)** | Phased plan to close spec-to-implementation gaps |
 | **[Frontend README](frontend/README.md)** | React dashboard documentation |
 
 ## Smart Contracts
@@ -182,41 +132,6 @@ See **[LICENSE_SUGGESTER.md](LICENSE_SUGGESTER.md)** for detailed setup and usag
 |----------|---------|
 | **Groth16Verifier** | On-chain Groth16 proof verification |
 | **PlonkVerifier** | On-chain PLONK proof verification |
-
-## Security Integration
-
-FIE integrates with enterprise security infrastructure:
-
-### Boundary-SIEM Integration
-- Real-time event reporting via REST API, CEF, UDP/TCP
-- Standardized error codes aligned with SIEM schema
-- Severity levels (1-10) for alert prioritization
-- Automatic batching and retry with exponential backoff
-
-### Boundary-Daemon Protection
-- Connection protection via RecallGate, ToolGate, MessageGate
-- Policy enforcement with fail-closed semantics
-- RPC connection protection for blockchain interactions
-- Boundary modes: OPEN, RESTRICTED, TRUSTED, AIRGAP, COLDROOM, LOCKDOWN
-
-### Usage
-```javascript
-const { createFIESecurity } = require('./security');
-
-// Create security integration
-const security = createFIESecurity({
-  siemUrl: 'http://boundary-siem:8080',
-  daemonSocket: '/var/run/boundary-daemon/daemon.sock'
-});
-
-// Apply middleware to Express app
-security.applyTo(app);
-
-// Connect to services
-await security.connect();
-```
-
-See `security/` directory for full implementation.
 
 ## Architecture
 
@@ -294,14 +209,6 @@ See [SECURITY.md](SECURITY.md) for detailed audit findings and [ARCHITECTURE.md]
 - **Certora Prover** - Formal verification
 - **SMTChecker** - Built-in Solidity verification
 - **Circom** - Zero-knowledge circuits
-
-### Security Integration
-- **Boundary-SIEM** - Security event reporting
-- **Boundary-Daemon** - Connection protection
-
-### Optional Tools
-- **Ollama** - Local AI for license suggestions
-- **Python 3** - License suggester script
 
 ## Testing
 
