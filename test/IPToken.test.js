@@ -599,4 +599,43 @@ describe("IPToken", function () {
       expect(royaltyInfo.recipient).to.equal(creator.address);
     });
   });
+
+  describe("License Limit Enforcement", function () {
+    const contentHash = ethers.keccak256(ethers.toUtf8Bytes("Content"));
+
+    beforeEach(async function () {
+      await ipToken.connect(minter).mintIP(
+        creator.address,
+        "My Work",
+        "Description",
+        "code",
+        contentHash,
+        "ipfs://uri",
+        "MIT"
+      );
+    });
+
+    it("Should reject license duration below MIN_LICENSE_DURATION (1 day)", async function () {
+      await expect(
+        ipToken.connect(executor).grantLicense(0, licensee.address, 500, 86399)
+      ).to.be.revertedWith("License duration too short");
+    });
+
+    it("Should reject license duration above MAX_LICENSE_DURATION (20 years)", async function () {
+      const MAX_LICENSE_DURATION = 20 * 365 * 24 * 60 * 60;
+      await expect(
+        ipToken.connect(executor).grantLicense(0, licensee.address, 500, MAX_LICENSE_DURATION + 1)
+      ).to.be.revertedWith("License duration too long");
+    });
+
+    it("Should reject granting more than MAX_LICENSES_PER_TOKEN (100)", async function () {
+      for (let i = 0; i < 100; i++) {
+        await ipToken.connect(executor).grantLicense(0, licensee.address, 500, ONE_YEAR);
+      }
+
+      await expect(
+        ipToken.connect(executor).grantLicense(0, licensee.address, 500, ONE_YEAR)
+      ).to.be.revertedWith("License limit reached");
+    });
+  });
 });
