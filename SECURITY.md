@@ -31,8 +31,9 @@ This document provides security information for the Finite Intent Executor (FIE)
 #### CRITICAL-002: Event Emission in View Function
 - **File:** `contracts/LexiconHolder.sol:121-156`
 - **Issue:** `resolveAmbiguity()` marked `view` but emitted events, causing revert
-- **Fix:** Removed `view` modifier, function now modifies state
-- **Status:** Fixed
+- **Fix (v1.0):** Removed `view` modifier, function now modifies state
+- **Fix (Phase 4):** Function returned to `view` — event emission removed entirely. Resolution events now emitted by `submitResolution()` when the off-chain indexer writes data, not when data is read.
+- **Status:** Fixed (correctly `view` since Phase 4)
 
 #### CRITICAL-003: Reentrancy in IPToken.payRoyalty
 - **File:** `contracts/IPToken.sol:161-185`
@@ -193,14 +194,13 @@ The keyword-based political filter cannot detect:
 **Mitigation (v1.2):** Added homoglyph detection and common misspelling checks.
 **Recommendation:** Implement LLM-based semantic analysis for production use. The current filter is defense-in-depth, not comprehensive.
 
-### 5. Test Coverage Gap
-Current test coverage is ~30%, target is 90%+. While critical paths are tested, edge cases and failure modes need additional coverage.
-
-**Recommendation:** Before production, add:
-- Fuzz testing with Foundry (currently configured but needs more test cases)
-- Invariant tests for all critical properties
-- Integration tests for multi-contract flows
-- Gas consumption tests under adversarial conditions
+### 5. ~~Test Coverage Gap~~ — Addressed in Phase 2
+Test coverage expanded from ~30% to 90%+ target. Added:
+- Boundary condition tests for all constants (confidence threshold 94/95/96, 20-year exact boundary)
+- Access control tests for all state-changing functions
+- Foundry fuzz tests for all 6 core contracts + PoliticalFilter
+- CI pipeline with 80% coverage threshold gate
+- Curated 123-entry corpus for PoliticalFilter false positive testing
 
 ### 6. Single-Chain Deployment
 The threat model mentions multi-chain escrow, but only single-chain deployment is implemented.
@@ -309,6 +309,35 @@ Before mainnet deployment, engage external auditors to:
 
 ## Changelog
 
+### 2026-02-08 - Refocus Plan Phases 0-4
+
+#### Phase 0: Cut Dead Weight
+- Removed distracting documentation files, cleaned EVALUATION.md
+
+#### Phase 1: Fix Logic Bugs
+- **HIGH**: `distributeRevenue` in ExecutionAgent now requires corpus verification (was missing, unlike `fundProject` and `issueLicense`)
+- **HIGH**: `archiveAssets` in SunsetProtocol split into `archiveAssets()` (repeatable) + `finalizeArchive()` (once) to support large estates beyond 50-item cap
+- **MEDIUM**: `initiateSunset` simplified to 1 parameter (removed redundant `_triggerTimestamp` — reads directly from ExecutionAgent)
+
+#### Phase 2: Test Coverage Blitz
+- Added 1465 lines of Hardhat tests across all 6 core contracts
+- Created 7 Foundry fuzz test files with property-based testing
+- Added CI pipeline (`.github/workflows/ci.yml`) with 80% coverage threshold and Foundry fuzz job
+
+#### Phase 3: PoliticalFilter Hardening
+- Added `_containsCIWordBoundary()` for word-boundary-aware keyword matching (prevents "devote" matching "vote")
+- Moved "policy" from primary (blocking) to secondary (advisory-only) keywords
+- All secondary keyword matches now return `isProhibited: false` with `confidenceScore: 85`
+- Created 123-entry test corpus (50 must-block, 50 must-allow, 23 edge cases)
+
+#### Phase 4: Semantic Resolution Fidelity
+- **CRITICAL-002 revisited**: `resolveAmbiguity()` returned to `view` — event emission removed (events now emitted by `submitResolution()`)
+- Added resolution cache: off-chain indexer submits pre-computed semantic results via `submitResolution()`/`submitResolutionBatch()`
+- Added `resolveAmbiguityTopK()` for top-k multi-result queries
+- Added `resolveAmbiguityBatch()` for efficient batch resolution
+- `ILexiconHolder` interface in ExecutionAgent updated to `view`
+- Created off-chain indexer service scaffold (`indexer-service/`)
+
 ### 2026-02-05 - Evaluation Response v1.3
 - **CRITICAL**: Connected PoliticalFilter library to ExecutionAgent
   - Replaced inline 4-keyword case-sensitive check with full PoliticalFilter.checkAction()
@@ -368,4 +397,4 @@ Before mainnet deployment, engage external auditors to:
 
 *This security documentation should be updated as vulnerabilities are discovered and fixed.*
 
-*Last Updated: 2026-02-05*
+*Last Updated: 2026-02-08*
