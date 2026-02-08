@@ -58,7 +58,7 @@ Narrow, scope-bounded AI executor.
 - Fund aligned projects
 - Enforce constraints via smart contracts
 
-**Interpretation**: All ambiguous terms resolved exclusively via retrieval-augmented generation against the frozen contextual corpus.
+**Interpretation**: All ambiguous terms resolved exclusively against the frozen contextual corpus. The current on-chain implementation uses exact keyword-hash lookup via `LexiconHolder.resolveAmbiguity()`. The specification target is retrieval-augmented generation (off-chain semantic matching with on-chain verification), which is not yet implemented. See REFOCUS_PLAN.md Phase 4.
 
 **Ambiguity Resolution Failure Mode**: If intent cannot be resolved with >=95% confidence through corpus citation, the Execution Agent MUST permanently default to inaction for the affected operation or branch. No speculative or creative interpretation permitted.
 
@@ -66,7 +66,9 @@ Narrow, scope-bounded AI executor.
 
 **Political Keyword Immutability (Design Choice)**: The political keyword list is compiled into the contract bytecode and is intentionally immutable. This is consistent with the drift-resistance philosophy: a posthumous executor should not have its constraints modified after deployment. Political language may evolve, but the contract's prohibition scope is fixed at deployment time. This prevents post-deployment weakening of the No Political Agency Clause by any party, including operators.
 
-**Logging**: All decisions logged on-chain with corpus citations. Political filter violations emit `PoliticalActionBlocked` events with the matched term and confidence score for SIEM integration.
+**Logging**: All decisions logged on-chain with corpus citations. Political filter violations emit `PoliticalActionBlocked` events with the matched term and confidence score.
+
+**Known Limitation — ASCII-Only Action Strings**: The PoliticalFilter homoglyph protection (`_containsSuspiciousCharacters`) rejects any non-ASCII byte in action strings. This means action descriptions containing accented characters, CJK text, Arabic, or other non-Latin scripts will be blocked. This is a known trade-off for homoglyph attack prevention. See REFOCUS_PLAN.md Phase 3.
 
 ### Lexicon Holders
 
@@ -175,7 +177,7 @@ All core smart contracts are implemented (6 core + 9 oracle/verifier):
 | Tool | Location | Status | Notes |
 |------|----------|--------|-------|
 | Deployment Script | `scripts/deploy.js` | Implemented | Local and network deployment |
-| License Suggester | `scripts/license_suggester.py` | Implemented | Optional Ollama-based license suggestions |
+| ~~License Suggester~~ | ~~`scripts/license_suggester.py`~~ | Removed | Removed in Phase 0 refocus — different problem domain (pre-mortem), added Python/Ollama dependency |
 | ZK Proof Generator | `scripts/zk/zkProofGenerator.js` | Implemented | Off-chain proof generation SDK |
 | Circuit Build Script | `scripts/zk/build_circuits.sh` | Implemented | Compile circuits and generate keys |
 | Test Suite | `test/FIESystem.test.js` | Basic | Core functionality tested, ~30% coverage |

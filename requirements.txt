@@ -1,4 +1,0 @@
-# Python dependencies for optional license suggestion tool
-# Install with: pip install -r requirements.txt
-
-ollama>=0.1.0

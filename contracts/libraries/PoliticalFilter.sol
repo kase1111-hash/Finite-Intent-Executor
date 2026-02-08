@@ -408,6 +408,11 @@ library PoliticalFilter {
      *         Cyrillic, Greek, and other scripts have characters visually similar to Latin
      *         Examples: Cyrillic 'а' (U+0430) looks like Latin 'a'
      *                   Cyrillic 'р' (U+0440) looks like Latin 'p'
+     *
+     * KNOWN LIMITATION: This function rejects ALL non-ASCII bytes, which means action
+     * strings containing accented characters (é, ñ, ü), CJK text, Arabic, or any
+     * non-Latin script will be blocked. Action descriptions must be ASCII-only.
+     * This is a trade-off for homoglyph attack prevention. See REFOCUS_PLAN.md Phase 3.
      */
     function _containsSuspiciousCharacters(bytes memory str) private pure returns (bool) {
         for (uint256 i = 0; i < str.length; i++) {
@@ -458,7 +463,6 @@ library PoliticalFilter {
 
         // Lobbying misspellings
         if (_containsCI(actionBytes, "lobying")) return (true, "lobbying");
-        if (_containsCI(actionBytes, "lobbying")) return (true, "lobbying");
         if (_containsCI(actionBytes, "lobbiing")) return (true, "lobbying");
         if (_containsCI(actionBytes, "lobyist")) return (true, "lobbyist");
 

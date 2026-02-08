@@ -39,9 +39,6 @@ This document provides operational procedures for deploying, maintaining, and tr
    MAINNET_RPC_URL=       # For mainnet deployment
    ETHERSCAN_API_KEY=     # For contract verification
 
-   # Security (optional but recommended)
-   BOUNDARY_SIEM_URL=     # Security event reporting
-   BOUNDARY_DAEMON_HOST=  # Connection protection
    ```
 
 ### Network Selection
@@ -169,27 +166,6 @@ await executionAgent.transferOwnership(MULTISIG_ADDRESS);
 | `SunsetCompleted` | SunsetProtocol | INFO | Verify completion |
 | `InactionDefault` | ExecutionAgent | WARNING | Review confidence |
 
-### Security Integration
-
-If using Boundary-SIEM:
-
-```javascript
-const { createFIESecurity } = require('./security');
-
-const security = createFIESecurity({
-  siemUrl: process.env.BOUNDARY_SIEM_URL,
-  daemonSocket: process.env.BOUNDARY_DAEMON_SOCKET
-});
-
-await security.connect();
-
-// Monitor contract events
-const cleanup = security.security.monitorContractEvents(
-  executionAgent,
-  ['ActionExecuted', 'InactionDefault', 'PoliticalViolation']
-);
-```
-
 ### Health Checks
 
 ```bash
@@ -299,7 +275,6 @@ Check transaction logs on block explorer:
 
 - Security Team: [Configure in .env]
 - On-Call Engineer: [Configure in .env]
-- Boundary-SIEM Alerts: [Configure in SIEM dashboard]
 
 ---
 
@@ -308,7 +283,6 @@ Check transaction logs on block explorer:
 ### Daily
 
 - [ ] Check contract event logs for anomalies
-- [ ] Verify SIEM connectivity
 - [ ] Monitor gas prices for pending operations
 
 ### Weekly
