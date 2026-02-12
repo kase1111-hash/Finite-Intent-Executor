@@ -1,324 +1,307 @@
-# REFOCUS PLAN
+# REFOCUS PLAN v2
 
-*Derived from [EVALUATION.md](EVALUATION.md) — February 2026*
-
-**Goal:** Close the gap between what the specification describes and what the code delivers. Stop expanding horizontally (docs, tooling, infrastructure). Start expanding vertically (correctness, coverage, fidelity).
-
-**Guiding Principle:** Every phase must leave the system more deployable than it was before. No phase introduces new features — only fixes, tests, and fidelity improvements.
+*Derived from [EVALUATION.md](EVALUATION.md) — February 12, 2026*
+*Supersedes REFOCUS PLAN v1 (Phases 0-4 of v1 are complete)*
 
 ---
 
-## Phase 0: Cut Dead Weight
+## Status of Previous Plan
 
-**Duration:** 1 day
-**Risk:** None — removes code that isn't used in the execution path
-**Exit Criteria:** Repo is leaner, CI still passes, no contract behavior changes
+Phases 0-4 of the original refocus plan have been executed:
 
-### 0.1 Remove Distraction Files
+| Phase | Status | Evidence |
+|-------|--------|----------|
+| **0: Cut Dead Weight** | Done | License suggester, SIEM middleware, batch scripts removed. PoliticalFilter duplicate cleaned. |
+| **1: Fix Logic Bugs** | Done | `distributeRevenue` now has corpus verification (`ExecutionAgent.sol:314-333`). `archiveAssets` split into repeatable `archiveAssets()` + one-time `finalizeArchive()` (`SunsetProtocol.sol:142-185`). `initiateSunset` simplified to 1 parameter. |
+| **2: Test Coverage Blitz** | Done | 6,532 lines of Hardhat tests across 10 files. 1,474 lines of Foundry fuzz tests across 7 files. CI pipeline with 80% coverage threshold. |
+| **3: PoliticalFilter Hardening** | Done | Word-boundary matching added. "policy" moved to secondary (advisory-only). 123-entry test corpus. |
+| **4: Semantic Resolution Fidelity** | Done | `resolveAmbiguity()` returned to `view`. Resolution cache added. `submitResolution()`/`submitResolutionBatch()` for off-chain indexer. `resolveAmbiguityTopK()` and `resolveAmbiguityBatch()` added. Indexer-service scaffold built (1,047 LOC). |
 
-| Action | Target | Reason |
-|--------|--------|--------|
-| Delete | `scripts/license_suggester.py` | Solves a different problem (pre-mortem license selection). Adds Python/Ollama dependency for zero posthumous execution value. |
-| Delete | `LICENSE_SUGGESTER.md` | Documentation for removed tool. |
-| Delete | `requirements.txt` | Only existed for the license suggester's Python dependencies. |
-| Delete | `security/` (entire directory) | SIEM/Boundary-Daemon middleware for a system with no production instance. Premature. Rebuild when there's something live to monitor. |
-| Delete | `setup.bat`, `dev.bat`, `start-node.bat`, `start-frontend.bat`, `deploy.bat`, `run-tests.bat`, `setup.ps1` | Seven Windows scripts for a crypto developer audience on Linux/Mac. All functionality already exists in `package.json` npm scripts. |
-
-### 0.2 Trim Documentation Bloat
-
-Do NOT delete documentation — but consolidate. The current 16 markdown files (~200KB) describe a more capable system than what exists. Accuracy matters more than volume.
-
-| Action | Target | Reason |
-|--------|--------|--------|
-| Update | `SPECIFICATION.md` | Reclassify `medical_verifier.circom` and `legal_verifier.circom` from "Implemented" to "Stub/Entry Point". They are single-line includes with no domain-specific logic. |
-| Update | `SPECIFICATION.md` | Change "retrieval-augmented generation" language to accurately describe the current exact-match hash lookup in `LexiconHolder.resolveAmbiguity`. Note the gap as a known limitation. |
-| Update | `README.md` | Fix security audit table to match `SECURITY.md` (HIGH severity count is inconsistent). |
-| Remove references | `OPERATIONS.md` | Remove references to SIEM/Boundary-Daemon integration that was cut in 0.1. |
-
-### 0.3 Clean PoliticalFilter Noise
-
-| Action | Target | Reason |
-|--------|--------|--------|
-| Remove | `PoliticalFilter.sol:461` | Duplicate check — "lobbying" listed as misspelling of itself. Already caught by primary keyword on line 88. |
-| Document | `SPECIFICATION.md`, `PoliticalFilter.sol` NatSpec | Add explicit note: "Action strings must be ASCII-only. Non-ASCII bytes are rejected by homoglyph protection. This is a known limitation for international text." |
+**What remains is Phase 5 (Audit Readiness) from v1, plus new priorities surfaced by the February 2026 evaluation.**
 
 ---
 
-## Phase 1: Fix Logic Bugs
+## What the Evaluation Found
 
-**Duration:** 2-3 days
-**Risk:** Medium — changes contract behavior in the execution and sunset paths
-**Exit Criteria:** All value-transfer functions verify corpus alignment. Sunset workflow works for estates of any size. Existing tests still pass.
+The February 2026 evaluation classified the project as **Underdeveloped** with **Feature Creep** risk. Key findings:
 
-### 1.1 Add Corpus Verification to `distributeRevenue`
+1. **The concept is sound.** The 20-year sunset, default-to-inaction, and no-political-agency constraints are genuinely novel.
 
-**File:** `ExecutionAgent.sol:312-327`
+2. **The on-chain contracts are well-engineered for alpha.** Clean architecture, CEI pattern, bounded arrays, immutable constants, honest security docs.
 
-**Problem:** `distributeRevenue` is the only value-transfer function without corpus verification. `issueLicense` (line 225) and `fundProject` (line 269) both call `lexiconHolder.resolveAmbiguity()`. `distributeRevenue` skips it entirely, allowing executors to send treasury funds to arbitrary addresses without confidence checks.
+3. **The oracle infrastructure (2,710 LOC) is larger than the core contracts (2,413 LOC).** ChainlinkAdapter, UMAAdapter, ZKVerifierAdapter, TrustedIssuerRegistry, and OracleRegistry are fully implemented but not exercised end-to-end in any integration test against real oracle networks. They are a separate product bundled into this one.
 
-**Fix:**
-- Add `_corpusHash` parameter to `distributeRevenue`
-- Add `_description` parameter (string, like `fundProject`)
-- Call `lexiconHolder.resolveAmbiguity()` with a query string like `"distribute_revenue:<description>"`
-- Enforce `confidence >= CONFIDENCE_THRESHOLD` with `InactionDefault` emit on failure
-- Update the `IExecutionAgent` interface if one exists externally
-- Update frontend `config.js` ABI to match
+4. **The ZK verifiers (1,210 LOC) are stock auto-generated code** with no end-to-end circuit-to-verification flow tested in CI.
 
-**Validation:**
-- Write a test that attempts revenue distribution without corpus match — must revert or emit `InactionDefault`
-- Write a test that succeeds with a valid corpus match above 95% confidence
-- Verify `fundProject` and `issueLicense` tests still pass (regression check)
+5. **The indexer-service has a mock embedding provider.** The architecture is right (event listener, corpus fetcher, embedding computation, on-chain submission), but it uses a bag-of-words mock. The core question — "can this system produce meaningful confidence scores from real text?" — remains unanswered.
 
-### 1.2 Fix `archiveAssets` Single-Shot Limitation
+6. **The documentation (20+ files) describes a more capable system than exists.** No concrete worked example shows what FIE actually does with real data.
 
-**File:** `SunsetProtocol.sol:147-177`
-
-**Problem:** `assetsArchived` is set to `true` after one call to `archiveAssets`. Combined with `MAX_ARCHIVE_BATCH_SIZE = 50`, creators with >50 assets cannot complete the sunset workflow — the second call reverts at line 154.
-
-**Fix:** Two options (choose one):
-
-**Option A — Separate archive and finalize steps:**
-- Remove `sunsetStates[_creator].assetsArchived = true` from `archiveAssets`
-- Add a new `finalizeArchive(address _creator)` function that sets the flag
-- `transitionIP` continues to require `assetsArchived == true`
-
-**Option B — Allow multiple archive calls:**
-- Replace the `!sunsetStates[_creator].assetsArchived` check with a `!sunsetStates[_creator].ipTransitioned` check (archives are still valid until IP transition locks them)
-- Move `assetsArchived = true` to be set only when the operator explicitly marks archival as complete
-
-Option A is cleaner. It makes the state machine explicit: archive (repeatable) -> finalize archive (once) -> transition IP.
-
-**Validation:**
-- Write a test that archives 120 assets across 3 batches, then finalizes
-- Write a test confirming `transitionIP` still requires archival to be finalized
-- Write a test that verifies the full sunset workflow end-to-end with >50 assets
-
-### 1.3 Remove Redundant `initiateSunset` Parameter
-
-**File:** `SunsetProtocol.sol:104-138`
-
-**Problem:** `initiateSunset(address _creator, uint256 _triggerTimestamp)` accepts a timestamp, then immediately validates it against `executionAgent.triggerTimestamps(_creator)` on line 109-113. The parameter is pointless — the function could just read the value directly, as `emergencySunset` already does on line 294.
-
-**Fix:**
-- Remove `_triggerTimestamp` parameter
-- Read `actualTriggerTimestamp` directly from `executionAgent.triggerTimestamps(_creator)`
-- Remove the equality check (lines 111-114) since there's no user-supplied value to compare
-- Update callers (deployment scripts, frontend)
-
-**Validation:**
-- Existing sunset tests pass with the simplified signature
-- Deploy script updated if it calls `initiateSunset`
+7. **The frontend is a separate React application** bundled as a subdirectory. It works for demos but has no real executor to interact with.
 
 ---
 
-## Phase 2: Test Coverage Blitz
+## Guiding Principles for v2
 
-**Duration:** 1-2 weeks
-**Risk:** Low — tests don't change contract behavior
-**Exit Criteria:** Coverage >= 90% on the 6 core contracts. All Foundry invariant tests pass. CI runs both Hardhat and Foundry test suites.
-**Dependency:** Phase 1 complete (tests must validate the fixed behavior)
-
-### 2.1 Hardhat Unit Tests — Fill Gaps
-
-Priority order based on risk to user funds:
-
-| Contract | Current State | Target | Focus Areas |
-|----------|--------------|--------|-------------|
-| `ExecutionAgent` | Partial (some empty test bodies) | Full | Confidence threshold boundary (94/95/96), corpus verification on all 3 value-transfer functions, political filter integration, sunset activation, emergency recovery timing |
-| `SunsetProtocol` | Partial | Full | 20-year boundary precision, multi-batch archival (Phase 1.2 fix), workflow ordering enforcement, emergency sunset by non-operator, double-sunset prevention |
-| `TriggerMechanism` | Partial | Full | Trigger irreversibility, deadman interval boundary, quorum threshold, oracle mode switching, ZK verification flow |
-| `PoliticalFilter` | None (tested indirectly) | Dedicated suite | False positive rate (test "insurance policy", "devote resources", "area of influence"), false negative rate (test bypass attempts), misspelling coverage, homoglyph detection, MAX_FILTER_STRING_LENGTH boundary |
-| `LexiconHolder` | Partial | Full | Corpus freeze immutability, hash mismatch rejection, empty index handling, batch index creation, MAX bounds |
-| `IntentCaptureModule` | Partial | Full | Revocation while alive, double-trigger prevention, corpus window validation (5-10 year), MAX_GOALS boundary |
-| `IPToken` | Partial | Full | Royalty distribution, license management, post-sunset public domain transition |
-
-**Action items:**
-- Delete empty test bodies in `test/FIESystem.test.js:224-243` — replace with real assertions or remove to eliminate false coverage signal
-- Add negative tests for every `require()` statement in the 6 core contracts
-- Add boundary tests for every `MAX_*` constant
-
-### 2.2 Foundry Fuzz Tests — Expand Skeleton
-
-The existing `foundry-tests/` has 3 files. Expand:
-
-| File | Status | Add |
-|------|--------|-----|
-| `ExecutionAgent.fuzz.t.sol` | Exists | Fuzz confidence values (0-100), fuzz action strings for PoliticalFilter bypass attempts, fuzz treasury amounts for over/underflow |
-| `IntentCaptureModule.fuzz.t.sol` | Exists | Fuzz corpus window years, fuzz goal counts up to MAX_GOALS |
-| `Invariants.t.sol` | Exists | Add invariants: `isSunset` can only go false->true, `CONFIDENCE_THRESHOLD` always == 95, `SUNSET_DURATION` always == 20*365 days, treasury balance >= sum of pending distributions |
-| `SunsetProtocol.fuzz.t.sol` | **New** | Fuzz timestamp values around the 20-year boundary, fuzz batch sizes for archival |
-| `TriggerMechanism.fuzz.t.sol` | **New** | Fuzz deadman intervals, fuzz signature counts vs. quorum thresholds |
-| `PoliticalFilter.fuzz.t.sol` | **New** | Fuzz random strings for false positive rate measurement, fuzz known political terms with character substitutions |
-
-### 2.3 CI Pipeline — Add Foundry
-
-**File:** `.github/workflows/ci.yml`
-
-Current CI runs Hardhat compile, Hardhat test, and frontend lint. Add:
-
-- Install Foundry (foundryup) in CI
-- Run `forge test` after Hardhat tests
-- Run `forge test --gas-report` and save as artifact
-- Add `npx hardhat coverage` step with minimum threshold check (fail if < 90%)
+1. **Vertical over horizontal.** Stop adding capabilities. Start proving the existing ones work end-to-end.
+2. **Prove the thesis.** The thesis is: "An AI can interpret a frozen corpus and produce meaningful confidence scores that the 95% threshold can act on." Every phase must move toward proving or disproving this.
+3. **Reduce surface area.** Every line of code that isn't exercised end-to-end is liability, not asset.
+4. **One concrete example is worth 20 documentation files.**
 
 ---
 
-## Phase 3: PoliticalFilter Hardening
-
-**Duration:** 3-5 days
-**Risk:** Medium — changes filter behavior, may affect what actions pass/fail
-**Exit Criteria:** False positive rate on a curated test set of 50 legitimate asset-management phrases < 5%. No regression on known political term detection.
-**Dependency:** Phase 2 complete (need test coverage to validate filter changes safely)
-
-### 3.1 Reduce False Positives with Word Boundary Detection
-
-**Problem:** Substring matching causes "policy" to block "insurance policy distribution", "vote" to block "devote", and "influence" to block "area of influence."
-
-**Approach:** Add word-boundary-aware matching for terms that commonly appear in legitimate contexts. For primary keywords with high false-positive risk (`policy`, `vote`, `influence`, `regulation`, `advocate`, `liberal`, `conservative`), check that the match is bounded by spaces, punctuation, or string start/end — not embedded in a larger word.
-
-**Affected terms to analyze:**
-| Term | False positive example | Action needed |
-|------|----------------------|---------------|
-| `policy` | "insurance policy distribution" | Add boundary check OR move to secondary (contextual) |
-| `vote` | "devote resources to" | Add boundary check |
-| `influence` | "area of influence in market" | Move to secondary (only block when combined with political context) |
-| `regulatory` | "regulatory compliance review" | Move to secondary |
-| `advocate` | "advocate for better tooling" | Move to secondary |
-| `liberal` | "liberal interpretation of terms" | Move to secondary |
-| `conservative` | "conservative estimate" | Move to secondary |
-
-### 3.2 Document ASCII-Only Limitation
-
-If `_containsSuspiciousCharacters` stays (blocking all non-ASCII):
-- Add NatSpec documentation to PoliticalFilter explaining the restriction
-- Add to SPECIFICATION.md under "Non-Negotiable Constraints" or a new "Known Limitations" section
-- Add a revert message that says "Non-ASCII characters not permitted in action strings" instead of the generic "suspicious_characters"
-
-If the decision is to loosen it:
-- Allow common Latin Extended characters (accents: 0xC0-0xFF single-byte range)
-- Keep blocking multi-byte sequences (Cyrillic, CJK, etc.) which are the actual homoglyph risk
-- This requires careful UTF-8 parsing — defer to Phase 5 if the complexity is too high
-
-### 3.3 Build a PoliticalFilter Test Corpus
-
-Create `test/fixtures/political-filter-corpus.json` with three sections:
-
-1. **Must Block** (50+ entries): known political actions, misspellings, homoglyph attempts
-2. **Must Allow** (50+ entries): legitimate asset management phrases that currently false-positive
-3. **Edge Cases** (20+ entries): ambiguous phrases that document the filter's intended behavior
-
-Run this corpus as a parameterized test suite in both Hardhat and Foundry. Track false positive/negative rates as a CI metric.
-
----
-
-## Phase 4: Semantic Resolution Fidelity
-
-**Duration:** 2-4 weeks
-**Risk:** High — this is the most architecturally significant change
-**Exit Criteria:** `resolveAmbiguity` returns meaningful confidence scores for queries that are semantically similar (not just exact matches) to indexed terms. The 95% threshold produces different outcomes for strong vs. weak corpus matches.
-**Dependency:** Phases 1-3 complete. Core contracts are bug-free and well-tested before changing the interpretation engine.
-
-### 4.1 Define the Problem Precisely
-
-Currently `LexiconHolder.resolveAmbiguity` does:
-```
-queryHash = keccak256(query)
-index = semanticIndices[creator][queryHash]
-return highest-scoring citation from index
-```
-
-This means:
-- Query "license_issuance" returns a result only if someone pre-indexed exactly "license_issuance"
-- Query "issue a license" returns nothing (different hash)
-- The 95% confidence threshold is binary: either the pre-set score (if hash matches) or 0 (if it doesn't)
-
-The spec says "retrieval-augmented generation against the frozen contextual corpus." The implementation needs to move toward this — but full on-chain RAG is infeasible. The realistic target is **off-chain semantic resolution with on-chain verification**.
-
-### 4.2 Design: Off-Chain Resolution, On-Chain Verification
-
-**Architecture:**
-1. Off-chain service (could be an LLM, vector DB, or embedding model) receives the query and corpus
-2. Service returns: `(citation, confidence, proof)` where proof is a commitment to the computation
-3. On-chain `LexiconHolder` verifies the proof against the frozen corpus hash
-4. Confidence score is now meaningful — it's the similarity score from the embedding model
-
-**Options for on-chain verification:**
-- **Option A: Trusted Indexer** — The INDEXER_ROLE submits resolution results on-chain. Trust-based but simple. Matches current architecture (just makes the indexer more capable).
-- **Option B: Optimistic Verification** — Results are submitted with a challenge period. Anyone can dispute with counter-evidence. Integrates with existing UMA adapter pattern.
-- **Option C: ZK Proof of Computation** — The off-chain service proves it ran the correct similarity computation on the correct corpus. Most trustless, but requires custom ZK circuits for embedding similarity.
-
-**Recommendation:** Start with Option A (trusted indexer). The INDEXER_ROLE already exists and the trust model is already accepted. Replace the manual pre-indexing workflow with a service that:
-1. Loads the frozen corpus from IPFS/Arweave (verified by corpus hash)
-2. Computes embeddings for all corpus content
-3. On query: computes query embedding, finds nearest corpus citation, returns similarity score as confidence
-4. Submits result on-chain via `resolveAmbiguity` (which already accepts external calls from INDEXER_ROLE)
-
-This doesn't change the contract interface — only the quality of the data being fed into it.
-
-### 4.3 Modify LexiconHolder for Richer Indexing
-
-- Add support for multiple index entries per query (fuzzy matches return top-k)
-- Add a `resolveAmbiguityBatch` function for efficiency
-- Consider making `resolveAmbiguity` a `view` function (remove the event emission, or move it to the caller). This reduces gas cost per execution action.
-
-### 4.4 Build the Off-Chain Indexing Service
-
-This is a new component — the only "new code" in the entire refocus plan.
-
-- TypeScript/Python service that watches for `CorpusFrozen` events
-- Fetches corpus from decentralized storage
-- Builds vector embeddings (could use any model: OpenAI, local sentence-transformers, etc.)
-- Responds to resolution requests from ExecutionAgent's off-chain orchestrator
-- Submits results on-chain via the INDEXER_ROLE
-
-**Scope guard:** This service is an INDEXER, not an EXECUTOR. It submits semantic indices. It cannot execute, modify, or veto any action. This preserves the LexiconHolder's non-actuating property.
-
----
-
-## Phase 5: Audit Readiness
+## Phase 6: Prove the Core Loop
 
 **Duration:** 2-3 weeks
-**Risk:** Low — preparation work, no contract changes
-**Exit Criteria:** External auditor has a clean, documented, well-tested codebase to review. All known issues are either fixed or documented as accepted risks.
-**Dependency:** Phases 1-4 complete.
+**Risk:** High — this is the existential test for the project
+**Exit Criteria:** One end-to-end test with real text data that demonstrates the 95% confidence threshold producing three distinct outcomes: execute, default-to-inaction, and block.
+**Dependency:** None (phases 0-4 are complete)
 
-### 5.1 Pre-Audit Checklist
+### 6.1 Replace Mock Embedding Provider with Real Embeddings
 
-| Item | Status After Phases 0-4 | Action |
-|------|------------------------|--------|
-| Test coverage >= 90% | Done (Phase 2) | Run `npx hardhat coverage`, verify all contracts above threshold |
-| All logic bugs fixed | Done (Phase 1) | Regression test suite confirms |
-| Foundry invariant tests pass | Done (Phase 2) | `forge test` in CI |
-| PoliticalFilter false positive rate < 5% | Done (Phase 3) | Corpus test suite confirms |
-| Semantic resolution produces meaningful scores | Done (Phase 4) | Integration test with off-chain indexer |
-| Known limitations documented | Done (Phase 0, 3) | ASCII-only filter, single-chain, no LLM parsing |
-| Internal audit findings re-verified | Pending | Walk through SECURITY.md findings, confirm fixes still hold after Phase 1-4 changes |
-| Gas benchmarks documented | Pending | Run `npm run test:gas`, document baseline costs per operation |
-| Deployment script tested on Sepolia | Pending | Full deployment + interaction test on testnet |
+**File:** `indexer-service/src/embeddings.ts`
 
-### 5.2 Consolidate Documentation for Auditors
+**Current state:** `MockEmbeddingProvider` uses bag-of-words with vocabulary accumulation. This produces cosine similarity scores, but they are not semantically meaningful — "license the music" and "distribute the royalties" would score poorly even if both are clearly aligned with a music creator's intent.
 
-Create a single `AUDIT_BRIEF.md` that gives an external auditor everything they need:
+**Target:** A real embedding provider that produces meaningful semantic similarity scores.
 
-1. System overview (1 page — extracted from SPECIFICATION.md)
-2. Contract dependency graph (extracted from ARCHITECTURE.md)
-3. Trust assumptions (which roles are trusted, which aren't)
-4. Known limitations and accepted risks
-5. Formal invariants from `@custom:invariant` NatSpec annotations
-6. Test coverage report
-7. Previous internal audit findings and their fixes (from SECURITY.md)
+**Options (choose one):**
 
-This replaces asking auditors to read 16 separate markdown files.
+| Option | Pros | Cons |
+|--------|------|------|
+| **A: OpenAI `text-embedding-3-small`** | Best quality, easiest integration, well-documented | Requires API key, external dependency, cost per query |
+| **B: Local `sentence-transformers` via ONNX** | No external dependency, free, deterministic | Requires ONNX runtime in Node.js, larger package |
+| **C: Ollama with `nomic-embed-text`** | Local, free, good quality | Requires Ollama running, heavier setup |
 
-### 5.3 Engage External Auditor
+**Recommendation:** Option A for the proof-of-concept (fastest path to meaningful scores). The `EmbeddingProvider` interface in `types.ts` already supports swapping — implement `OpenAIEmbeddingProvider` alongside the mock.
 
-Target firms (alphabetical): Consensys Diligence, OpenZeppelin, Spearbit, Trail of Bits.
+**Deliverables:**
+- New file: `indexer-service/src/providers/openai.ts` (or equivalent)
+- Update `indexer-service/src/embeddings.ts` factory to support the new provider
+- Environment variable `EMBEDDING_PROVIDER=openai|mock` with `OPENAI_API_KEY` for the real provider
+- Verify: embedding of "license the music to streaming platforms" scores > 0.85 similarity against a corpus containing "I want my music to be available on all major streaming services"
+- Verify: embedding of "fund a political campaign" scores < 0.3 similarity against the same corpus
 
-Scope should cover:
-- 6 core contracts (~2,500 lines)
-- PoliticalFilter library (~480 lines)
-- Oracle adapters only if they'll be used in initial deployment (otherwise defer)
-- Foundry invariant test review (auditor can extend)
+### 6.2 Build a Realistic Test Corpus
+
+Create a concrete example scenario that makes FIE tangible.
+
+**File:** `test/fixtures/example-corpus/`
+
+**Persona:** Alex Chen, an independent musician and open-source developer who dies in 2027. Their intent:
+
+**Intent document (capture as `intent.json`):**
+- License music catalog to streaming platforms with 70/30 royalty split
+- Fund open-source projects aligned with digital rights (max $5,000 per project)
+- Maintain personal website for 10 years, then archive
+- All IP transitions to CC0 after 20-year sunset
+
+**Frozen corpus (capture as `corpus/` directory, 10-15 documents):**
+- Blog posts about music licensing philosophy
+- Open-source contribution guidelines they wrote
+- Email excerpts about their views on digital rights
+- Interview transcript about their creative process
+- Social media posts about specific projects they supported
+
+**Test queries (with expected confidence ranges):**
+- "License 'Midnight Waves' album to Spotify at 70/30 split" — **expect >95%** (directly aligned with stated intent and corpus)
+- "License 'Midnight Waves' album to Spotify at 50/50 split" — **expect 70-90%** (action aligned, but terms differ from stated preference)
+- "Fund $3,000 to Digital Freedom Foundation" — **expect >95%** (within budget, aligned with digital rights mission)
+- "Fund $50,000 to Digital Freedom Foundation" — **expect <50%** (far exceeds per-project budget)
+- "Donate to Senator Smith's re-election campaign" — **blocked by PoliticalFilter** (never reaches confidence check)
+- "Invest treasury in cryptocurrency trading" — **expect <50%** (not mentioned in corpus, speculative)
+- "Archive personal website to IPFS" — **expect >95%** (directly stated in intent)
+- "Sell music rights exclusively to one label" — **expect <50%** (contradicts streaming-first philosophy in corpus)
+
+### 6.3 End-to-End Integration Test with Real Data
+
+**File:** `test/E2ERealisticScenario.test.js`
+
+This is the single most important test in the project. It proves the thesis.
+
+**Flow:**
+1. Deploy all contracts to local Hardhat node
+2. Start indexer-service with real embedding provider pointed at local node
+3. Capture Alex Chen's intent on-chain (hash of intent document, corpus hash)
+4. Freeze corpus in LexiconHolder
+5. Indexer-service detects `CorpusFrozen` event, fetches corpus, computes embeddings
+6. Configure deadman switch trigger (30-day interval)
+7. Advance time 31 days — deadman switch fires
+8. Activate execution in ExecutionAgent
+9. Submit 8 test queries through the indexer (step 6.2 above)
+10. Indexer submits resolution results on-chain via `submitResolution()`
+11. Attempt to execute each action via `executeAction()`
+12. **Assert:** Actions with >95% confidence execute successfully
+13. **Assert:** Actions with <95% confidence emit `InactionDefault` and do not execute
+14. **Assert:** Political action is blocked by PoliticalFilter before confidence check
+15. Advance time 20 years
+16. Initiate sunset, archive assets, transition IP to CC0
+17. **Assert:** Post-sunset execution attempts fail
+
+**This test replaces the abstract claim "FIE executes posthumous intent" with concrete evidence.**
+
+### 6.4 Document the Example Scenario
+
+**File:** Update `README.md` "What Problem Does This Solve?" section
+
+Replace the current abstract bullet points with the Alex Chen scenario. Show:
+- What Alex captured before death
+- What happened when the deadman switch triggered
+- What actions were approved, which were blocked, and why
+- What happened at the 20-year sunset
+
+This makes FIE immediately understandable to anyone reading the README.
+
+---
+
+## Phase 7: Reduce Surface Area
+
+**Duration:** 1 week
+**Risk:** Low — removes code, doesn't change behavior of remaining code
+**Exit Criteria:** Oracle infrastructure extracted or clearly marked as optional. Documentation consolidated. Total LOC reduced.
+**Dependency:** Phase 6 complete (proves which code paths are actually needed)
+
+### 7.1 Extract Oracle Infrastructure
+
+The oracle contracts (OracleRegistry, ChainlinkAdapter, UMAAdapter, ZKVerifierAdapter, TrustedIssuerRegistry, IOracle, IZKVerifier) total ~2,710 lines — more than the 6 core contracts combined.
+
+**Options:**
+
+| Option | Effort | Result |
+|--------|--------|--------|
+| **A: Move to `contracts/oracles/` with clear boundary** | Low | Already done structurally; add a README stating these are optional extensions |
+| **B: Extract to separate npm package** | Medium | `@fie/oracle-adapters` package, imported as dependency |
+| **C: Delete and re-import when needed** | Low | Remove from repo entirely; Chainlink/UMA adapters can be rebuilt when integrating with real oracle networks |
+
+**Recommendation:** Option A for now, with a clear `contracts/oracles/README.md` stating:
+- These contracts are **optional extensions** for production oracle integration
+- The core system works with direct oracle mode (TriggerMechanism accepts any authorized address)
+- ChainlinkAdapter requires a live Chainlink node
+- UMAAdapter requires a live UMA Optimistic Oracle
+- ZKVerifierAdapter STARK support is unimplemented (Groth16/PLONK only)
+- None of these are exercised in the end-to-end integration test
+
+### 7.2 Extract ZK Verifiers
+
+The Groth16Verifier (460 lines) and PlonkVerifier (750 lines) are auto-generated from Circom circuits. They are stock implementations.
+
+**Action:**
+- Add `contracts/verifiers/README.md` stating these are auto-generated and should not be manually edited
+- Note that the Circom source files (`.circom`) are not in the repository — only the circuit config (`circuits/circuits.json`) exists
+- Mark the ZK verification path as **not tested end-to-end in CI**
+
+### 7.3 Consolidate Documentation
+
+**Current state:** 20+ markdown files totaling ~200KB.
+
+**Target:** 6 essential files + an archive directory.
+
+| Keep | Reason |
+|------|--------|
+| `README.md` | Entry point, updated with concrete example (Phase 6.4) |
+| `SPECIFICATION.md` | Core spec, source of truth for what the system does |
+| `ARCHITECTURE.md` | Technical design for developers and auditors |
+| `SECURITY.md` | Audit findings, fixes, known limitations |
+| `EVALUATION.md` | External assessment |
+| `REFOCUS_PLAN.md` | This document |
+
+| Move to `docs/archive/` | Reason |
+|--------------------------|--------|
+| `OPERATIONS.md` | No production instance to operate |
+| `DEPLOYMENT_CHECKLIST.md` | Premature — deploy script handles this |
+| `CONTRIBUTING.md` | No external contributors yet |
+| `ORACLE_INTEGRATION.md` | Covered by `contracts/oracles/README.md` (Phase 7.1) |
+| `FORMAL_VERIFICATION.md` | Certora specs not executed; defer |
+| `REPOSITORY_INTERACTION_DIAGRAM.md` | Useful but not essential |
+| `USAGE.md` | Replaced by concrete example in README |
+| `CHANGELOG.md` | Git history is the changelog |
+| `AUDIT_BRIEF.md` | Consolidate into SECURITY.md |
+
+**Action:** Create `docs/archive/` directory. Move files. Update any cross-references.
+
+### 7.4 Trim README Ecosystem Section
+
+**Current:** Lines 256-289 list 11 repositories across NatLangChain, Agent-OS, and Games ecosystems.
+
+**Action:** Replace with a single line:
+> FIE is part of the [NatLangChain ecosystem](https://github.com/kase1111-hash). See the organization page for related projects.
+
+---
+
+## Phase 8: Harden for Audit
+
+**Duration:** 2-3 weeks
+**Risk:** Low — preparation work, minimal contract changes
+**Exit Criteria:** External auditor receives a clean, well-documented, fully-tested codebase. All known issues are fixed or documented as accepted risks.
+**Dependency:** Phases 6 and 7 complete.
+
+### 8.1 Fix Remaining Code Issues from Evaluation
+
+| Issue | File | Fix | Severity |
+|-------|------|-----|----------|
+| Dead event emission in reverted tx | `ExecutionAgent.sol:167-173` | Either remove the `emit PoliticalActionBlocked` before the revert (it's a no-op on-chain), or restructure to store the violation and revert separately. If keeping for trace-level debugging, add NatSpec documenting that this requires archive/trace node access. | Low |
+| Fake archive URI | `SunsetProtocol.sol:272-275` | Replace `_buildArchiveURI` with a parameter — the operator should provide the real IPFS CID when calling `archiveAssets`. Remove `_addressToString` helper (dead code after this change). | Low |
+| Legacy `submitOracleProof` | `TriggerMechanism.sol:532-547` | Add `@deprecated` NatSpec tag. Consider adding `revert("Use OracleRegistry or ZKVerifier")` behind a `LEGACY_MODE_ENABLED` flag, defaulting to disabled. | Medium |
+| Leap year drift | `ExecutionAgent.sol:45`, `SunsetProtocol.sol:42` | Document as accepted limitation in SECURITY.md (already acknowledged). No code change. | Informational |
+
+### 8.2 Run Full Test Suite and Fix Any Failures
+
+```
+npm test                          # All 10 Hardhat test files
+forge test --fuzz-runs 1000       # All 7 Foundry fuzz files
+npx hardhat coverage              # Verify >= 80% threshold
+```
+
+Fix any failures introduced by Phase 6 or 8.1 changes.
+
+### 8.3 Gas Benchmarks
+
+Run `REPORT_GAS=true npx hardhat test` and document baseline gas costs for critical operations:
+
+| Operation | Expected Gas | Acceptable? |
+|-----------|-------------|-------------|
+| `captureIntent` | TBD | Must be < 500K |
+| `executeAction` (with resolution) | TBD | Must be < 300K |
+| `submitResolution` | TBD | Must be < 200K |
+| `initiateSunset` | TBD | Must be < 200K |
+| `archiveAssets` (50 items) | TBD | Must be < 5M |
+
+Document in SECURITY.md under a new "Gas Costs" section.
+
+### 8.4 Testnet Deployment
+
+Deploy full system to Sepolia:
+1. Run `npx hardhat run scripts/deploy.js --network sepolia`
+2. Verify all contracts on Etherscan
+3. Execute a minimal lifecycle: capture intent, configure deadman, advance time (if possible on testnet, otherwise use quorum trigger), execute one action, verify confidence check
+4. Document deployed addresses and transaction hashes
+
+### 8.5 Consolidate Audit Brief
+
+Update `SECURITY.md` with a new "Audit Brief" section at the top containing:
+1. System overview (1 paragraph)
+2. Contract dependency graph (text diagram from ARCHITECTURE.md)
+3. Trust assumptions (which roles are trusted, which are permissionless)
+4. Immutable invariants (from `@custom:invariant` NatSpec annotations)
+5. Known limitations and accepted risks (consolidated list)
+6. Test coverage summary
+7. Previous internal audit findings and fix status (already in SECURITY.md)
+
+This replaces the separate AUDIT_BRIEF.md and gives auditors everything in one file.
+
+### 8.6 Engage External Auditor
+
+**Scope:** 6 core contracts + PoliticalFilter library (~3,000 lines). Oracle infrastructure excluded from initial scope (clearly marked as optional extensions per Phase 7.1).
+
+**Target firms:** Consensys Diligence, OpenZeppelin, Spearbit, Trail of Bits.
+
+**Deliverables to auditor:**
+- Git repository at the tagged commit
+- SECURITY.md (contains audit brief, known issues, invariants)
+- SPECIFICATION.md (what the system should do)
+- ARCHITECTURE.md (how it's built)
+- Test suite (Hardhat + Foundry)
+- The E2E realistic scenario test (Phase 6.3) as a walkthrough of system behavior
 
 ---
 
@@ -326,15 +309,26 @@ Scope should cover:
 
 | Phase | Duration | Changes Contracts? | Risk | Key Outcome |
 |-------|----------|--------------------|------|-------------|
-| **0: Cut Dead Weight** | 1 day | Minimal (1 line delete in PoliticalFilter) | None | Leaner repo, accurate docs |
-| **1: Fix Logic Bugs** | 2-3 days | Yes (3 contracts) | Medium | All value transfers verified, sunset works for any estate size |
-| **2: Test Coverage Blitz** | 1-2 weeks | No | None | 90%+ coverage, Foundry fuzzing, CI integration |
-| **3: PoliticalFilter Hardening** | 3-5 days | Yes (PoliticalFilter) | Medium | < 5% false positive rate, documented limitations |
-| **4: Semantic Resolution** | 2-4 weeks | Yes (LexiconHolder) + new off-chain service | High | Meaningful confidence scores, real semantic matching |
-| **5: Audit Readiness** | 2-3 weeks | No | None | Clean handoff to external auditor |
+| **6: Prove the Core Loop** | 2-3 weeks | No (indexer-service only) | High | Real embeddings, concrete example, E2E test that proves the thesis |
+| **7: Reduce Surface Area** | 1 week | No | None | Oracle infra documented as optional, docs consolidated, README focused |
+| **8: Harden for Audit** | 2-3 weeks | Yes (minor fixes) | Low | Clean handoff to external auditor with testnet deployment |
 
-**Total estimated duration:** 7-12 weeks
+**Total estimated duration:** 5-7 weeks
 
-**Non-negotiable ordering:** Phase 0 -> Phase 1 -> Phase 2 -> Phases 3 & 4 (can overlap) -> Phase 5
+**Non-negotiable ordering:** Phase 6 -> Phase 7 -> Phase 8
 
-Phase 2 MUST complete before 3 or 4 because test coverage is what makes contract changes safe. Phase 5 MUST be last because it validates everything prior.
+Phase 6 must come first because it answers the existential question: does the system actually work with real data? If the answer is no, phases 7 and 8 are wasted effort. If the answer is yes, phases 7 and 8 prepare the proven system for external validation.
+
+---
+
+## What Success Looks Like
+
+After all three phases, someone should be able to:
+
+1. Read the README and immediately understand what FIE does (Alex Chen example)
+2. Run `npm test` and see the E2E realistic scenario pass with clear confidence score differentiation
+3. Open SECURITY.md and find every known issue, its status, and the trust assumptions
+4. Look at the contract directory and see 6 focused core contracts (~2,400 lines) with clearly-marked optional oracle extensions
+5. Understand that the 95% confidence threshold is not just a number — it produces meaningfully different outcomes for aligned vs. ambiguous vs. unaligned actions
+
+The project moves from "well-built cage with nothing inside it" to "working system with proven semantic interpretation and honest documentation of what it can and cannot do."
