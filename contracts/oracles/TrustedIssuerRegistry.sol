@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 /**
  * @title TrustedIssuerRegistry
@@ -19,6 +20,7 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
  */
 contract TrustedIssuerRegistry is Ownable {
     using ECDSA for bytes32;
+    using MessageHashUtils for bytes32;
 
     // =============================================================================
     // STRUCTS
