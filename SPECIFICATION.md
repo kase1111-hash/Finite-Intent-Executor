@@ -7,12 +7,8 @@ The Finite Intent Executor (FIE) is a modular, blockchain-based system for captu
 **Related Documentation:**
 - [README.md](README.md) - Quick start guide and project overview
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Technical architecture and component design
-- [USAGE.md](USAGE.md) - Comprehensive usage guide with examples
-- [REPOSITORY_INTERACTION_DIAGRAM.md](REPOSITORY_INTERACTION_DIAGRAM.md) - System interaction flows
-- [LICENSE_SUGGESTER.md](LICENSE_SUGGESTER.md) - Optional AI-powered license suggestion tool
 - [SECURITY.md](SECURITY.md) - Security audit findings and best practices
-- [FORMAL_VERIFICATION.md](FORMAL_VERIFICATION.md) - Formal verification specifications and invariants
-- [ORACLE_INTEGRATION.md](ORACLE_INTEGRATION.md) - Oracle infrastructure and verification protocols
+- [docs/archive/](docs/archive/) - Additional documentation (usage, oracle integration, formal verification, etc.)
 
 ---
 
@@ -288,8 +284,8 @@ These constraints are hard-coded and cannot be changed:
 For detailed technical information, see:
 
 - **Architecture & Data Structures**: [ARCHITECTURE.md](ARCHITECTURE.md)
-- **API & Contract Functions**: [USAGE.md](USAGE.md)
-- **System Interaction Flows**: [REPOSITORY_INTERACTION_DIAGRAM.md](REPOSITORY_INTERACTION_DIAGRAM.md)
+- **API & Contract Functions**: [USAGE.md](docs/archive/USAGE.md)
+- **System Interaction Flows**: [REPOSITORY_INTERACTION_DIAGRAM.md](docs/archive/REPOSITORY_INTERACTION_DIAGRAM.md)
 
 ---
 
@@ -317,6 +313,6 @@ The Finite Intent Executor core contracts are implemented and functional. The sy
 
 ---
 
-*This specification document consolidates information from all repository documentation. For detailed architecture see [ARCHITECTURE.md](ARCHITECTURE.md), for usage examples see [USAGE.md](USAGE.md).*
+*This specification document consolidates information from all repository documentation. For detailed architecture see [ARCHITECTURE.md](ARCHITECTURE.md), for usage examples see [USAGE.md](docs/archive/USAGE.md).*
 
 *Last Updated: 2026-01-01*

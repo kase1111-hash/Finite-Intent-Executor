@@ -91,37 +91,15 @@ npm run deploy        # Terminal 2
 
 ## Documentation
 
-### Core Documentation
-
 | Document | Description |
 |----------|-------------|
 | **[SPECIFICATION.md](SPECIFICATION.md)** | Core specification v1.1 with implementation status |
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | Technical architecture and design details |
-| **[USAGE.md](USAGE.md)** | Comprehensive usage guide with examples |
+| **[SECURITY.md](SECURITY.md)** | Audit findings, known limitations, trust assumptions |
+| **[EVALUATION.md](EVALUATION.md)** | External assessment (February 2026) |
+| **[REFOCUS_PLAN.md](REFOCUS_PLAN.md)** | Development roadmap (phases 0-8) |
 
-### Technical Guides
-
-| Document | Description |
-|----------|-------------|
-| **[ORACLE_INTEGRATION.md](ORACLE_INTEGRATION.md)** | Oracle infrastructure and verification protocols |
-| **[FORMAL_VERIFICATION.md](FORMAL_VERIFICATION.md)** | Formal verification specs and critical invariants |
-| **[REPOSITORY_INTERACTION_DIAGRAM.md](REPOSITORY_INTERACTION_DIAGRAM.md)** | System interaction flows and diagrams |
-
-### Operations & Deployment
-
-| Document | Description |
-|----------|-------------|
-| **[DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md)** | Pre-deployment verification checklist |
-| **[OPERATIONS.md](OPERATIONS.md)** | Operations runbook: deployment, monitoring, troubleshooting |
-| **[SECURITY.md](SECURITY.md)** | Security audit findings and best practices |
-
-### Reference
-
-| Document | Description |
-|----------|-------------|
-| **[CHANGELOG.md](CHANGELOG.md)** | Version history and release notes |
-| **[REFOCUS_PLAN.md](REFOCUS_PLAN.md)** | Phased plan to close spec-to-implementation gaps |
-| **[Frontend README](frontend/README.md)** | React dashboard documentation |
+Additional docs (operations, deployment, oracle integration, formal verification, etc.) are in [`docs/archive/`](docs/archive/).
 
 ## Smart Contracts
 
@@ -182,17 +160,11 @@ A React-based web dashboard (`frontend/`) provides:
 - **Sunset Status**: Track 20-year countdown and public domain transition
 - **Lexicon Holder**: Freeze corpus and create semantic indices
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed component design and [REPOSITORY_INTERACTION_DIAGRAM.md](REPOSITORY_INTERACTION_DIAGRAM.md) for system interaction flows.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed component design.
 
 ## Usage
 
-See [USAGE.md](USAGE.md) for comprehensive usage guide including:
-- Installation and deployment
-- Intent capture and goal definition
-- Trigger configuration (deadman, quorum, oracle)
-- IP tokenization and licensing
-- Execution workflows
-- Sunset process
+See [`docs/archive/USAGE.md`](docs/archive/USAGE.md) for a comprehensive usage guide. The Alex Chen scenario above is the best starting point for understanding the system.
 
 ## Security
 
@@ -265,17 +237,11 @@ forge test --fuzz-runs 1000
 
 ## Contributing
 
-Contributions are welcome! Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
-
-**Quick Start:**
-
 1. Fork the repository
 2. Create a feature branch
 3. Write tests for new functionality
 4. Ensure all tests pass (`npm test`)
 5. Submit a pull request
-
-See the [Contributing Guide](CONTRIBUTING.md) for coding standards, testing requirements, and security considerations.
 
 ## License
 
