@@ -128,8 +128,6 @@ frontend/
 - [Main README](../README.md)
 - [Specification](../SPECIFICATION.md)
 - [Architecture](../ARCHITECTURE.md)
-- [Usage Guide](../USAGE.md)
-- [Oracle Integration](../ORACLE_INTEGRATION.md)
 - [Security](../SECURITY.md)
 
 ## License

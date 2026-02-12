@@ -8,11 +8,9 @@ The Finite Intent Executor (FIE) is a modular blockchain system consisting of si
 
 **Related Documentation**:
 - [SPECIFICATION.md](SPECIFICATION.md) - Core specification and principles
-- [REPOSITORY_INTERACTION_DIAGRAM.md](REPOSITORY_INTERACTION_DIAGRAM.md) - System interaction flows
-- [USAGE.md](USAGE.md) - Practical usage guide
-- [ORACLE_INTEGRATION.md](ORACLE_INTEGRATION.md) - Oracle infrastructure and verification protocols
 - [SECURITY.md](SECURITY.md) - Security audit findings and best practices
-- [FORMAL_VERIFICATION.md](FORMAL_VERIFICATION.md) - Formal verification specifications
+- [contracts/oracles/README.md](contracts/oracles/README.md) - Oracle infrastructure (optional extensions)
+- [docs/archive/](docs/archive/) - Additional documentation (usage, oracle integration, formal verification, etc.)
 
 ## System Architecture
 
@@ -639,7 +637,7 @@ The system includes a comprehensive oracle infrastructure for trigger verificati
 | **MedicalVerifier** | `circuits/medical_verifier.circom` | ZK circuit for medical certificates |
 | **LegalVerifier** | `circuits/legal_verifier.circom` | ZK circuit for legal documents |
 
-See [ORACLE_INTEGRATION.md](ORACLE_INTEGRATION.md) for detailed oracle documentation.
+See [ORACLE_INTEGRATION.md](docs/archive/ORACLE_INTEGRATION.md) for detailed oracle documentation.
 
 ## Frontend Dashboard
 
@@ -684,6 +682,6 @@ The React-based dashboard (`frontend/`) provides a complete user interface:
 
 ---
 
-For implementation examples and usage instructions, see [USAGE.md](USAGE.md).
+For implementation examples and usage instructions, see [USAGE.md](docs/archive/USAGE.md).
 
 *Last Updated: 2026-02-08*
