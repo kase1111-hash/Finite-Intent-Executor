@@ -222,7 +222,9 @@ struct Project {
 
 **Functions**:
 1. Provide interpretive citations from frozen corpus
-2. Post-sunset clustering of archived legacies
+2. Cache pre-computed semantic resolution results from the off-chain indexer
+3. Top-k and batch resolution for efficient multi-query processing
+4. Post-sunset clustering of archived legacies
 
 **Key Data Structures**:
 ```solidity
@@ -562,7 +564,7 @@ function batchCreateIndices(
 **Security Tests**: Attack vectors and edge cases
 **Gas Tests**: Optimization verification
 
-See `test/FIESystem.test.js` for examples.
+See `test/` for examples (11 Hardhat test files + 7 Foundry fuzz test files in `foundry-tests/`).
 
 ## Deployment Checklist
 
@@ -660,6 +662,7 @@ The React-based dashboard (`frontend/`) provides a complete user interface:
 | **ExecutionMonitor** | Monitor posthumous execution and actions |
 | **SunsetStatus** | Track 20-year countdown and public domain transition |
 | **Lexicon** | Freeze corpus and create semantic indices |
+| **MonitoringDashboard** | Advanced metrics, execution trends, and analytics |
 
 ## Future Enhancements
 

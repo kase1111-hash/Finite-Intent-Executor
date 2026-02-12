@@ -2,7 +2,7 @@
 
 A React-based web dashboard for interacting with the Finite Intent Executor smart contracts.
 
-*Last Updated: 2026-01-01*
+*Last Updated: 2026-02-12*
 
 ## Features
 
@@ -12,6 +12,7 @@ A React-based web dashboard for interacting with the Finite Intent Executor smar
 - **IP Token Management**: Mint ERC721 tokens for intellectual property, grant licenses
 - **Lexicon Holder**: Freeze corpus and create semantic indices for intent interpretation
 - **Execution Monitor**: Monitor and manage posthumous intent execution
+- **Monitoring Dashboard**: Advanced metrics, execution trends, and analytics
 - **Sunset Status**: Track the 20-year sunset countdown and public domain transition
 
 ## Tech Stack
@@ -73,7 +74,8 @@ npm run lint
 frontend/
 ├── src/
 │   ├── components/     # Reusable UI components
-│   │   └── Layout.jsx  # Main layout with sidebar navigation
+│   │   ├── Layout.jsx  # Main layout with sidebar navigation
+│   │   └── DocumentUploadArea.jsx  # Document drag-and-drop uploader
 │   ├── context/        # React contexts
 │   │   └── Web3Context.jsx  # Web3/wallet connection
 │   ├── contracts/      # Contract configuration
@@ -85,7 +87,8 @@ frontend/
 │   │   ├── IPTokens.jsx
 │   │   ├── ExecutionMonitor.jsx
 │   │   ├── SunsetStatus.jsx
-│   │   └── Lexicon.jsx
+│   │   ├── Lexicon.jsx
+│   │   └── MonitoringDashboard.jsx
 │   ├── styles/         # CSS files
 │   │   └── index.css   # Tailwind + custom styles
 │   ├── App.jsx         # Main app with routing
@@ -110,10 +113,10 @@ frontend/
 ## Networks Supported
 
 - Ethereum Mainnet
-- Goerli Testnet
 - Sepolia Testnet
-- Polygon
-- Mumbai Testnet
+- Goerli Testnet (deprecated)
+- Base L2 Mainnet
+- Base Sepolia Testnet
 - Hardhat Local (localhost:8545)
 
 ## Security Notes
@@ -132,4 +135,4 @@ frontend/
 
 ## License
 
-MIT
+CC0 1.0 Universal (Public Domain Dedication)

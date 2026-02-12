@@ -2,7 +2,7 @@
 
 [![Version](https://img.shields.io/badge/Version-0.1.0--alpha-orange.svg)](https://github.com/kase1111-hash/Finite-Intent-Executor/releases)
 [![License: CC0-1.0](https://img.shields.io/badge/License-CC0_1.0-lightgrey.svg)](https://creativecommons.org/publicdomain/zero/1.0/)
-[![Solidity](https://img.shields.io/badge/Solidity-0.8.20-blue.svg)](https://soliditylang.org/)
+[![Solidity](https://img.shields.io/badge/Solidity-0.8.26-blue.svg)](https://soliditylang.org/)
 [![Hardhat](https://img.shields.io/badge/Hardhat-2.22.0-yellow.svg)](https://hardhat.org/)
 [![OpenZeppelin](https://img.shields.io/badge/OpenZeppelin-5.4.0-blue.svg)](https://openzeppelin.com/)
 [![Tests](https://img.shields.io/badge/Tests-Passing-green.svg)](./test)
@@ -97,7 +97,7 @@ npm run deploy        # Terminal 2
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | Technical architecture and design details |
 | **[SECURITY.md](SECURITY.md)** | Audit findings, known limitations, trust assumptions |
 | **[EVALUATION.md](EVALUATION.md)** | External assessment (February 2026) |
-| **[REFOCUS_PLAN.md](REFOCUS_PLAN.md)** | Development roadmap (phases 0-8) |
+| **[REFOCUS_PLAN.md](REFOCUS_PLAN.md)** | Development roadmap v2 (phases 6-8) |
 
 Additional docs (operations, deployment, oracle integration, formal verification, etc.) are in [`docs/archive/`](docs/archive/).
 
@@ -193,7 +193,7 @@ See [SECURITY.md](SECURITY.md) for detailed audit findings and [ARCHITECTURE.md]
 ## Technology Stack
 
 ### Smart Contracts
-- **Solidity ^0.8.20** - Smart contract language (compiled with 0.8.20 via Hardhat)
+- **Solidity ^0.8.20** - Smart contract language (compiled with 0.8.26 via Hardhat)
 - **Hardhat 2.22.0** - Development framework with SMTChecker
 - **OpenZeppelin 5.4.0** - Security-audited contract libraries
 
@@ -229,11 +229,11 @@ forge test --fuzz-runs 1000
 ```
 
 ### Test Coverage
-- **9 test files** covering all core contracts
+- **11 test files** covering all core contracts
 - **Unit tests** for individual contract functions
-- **Integration tests** for complete workflows
+- **Integration tests** for complete workflows (including E2E realistic scenario)
 - **Gas benchmarks** for cost optimization
-- **Fuzzing tests** for edge case discovery
+- **Fuzzing tests** for edge case discovery (Foundry, 7 fuzz test files)
 
 ## Contributing
 

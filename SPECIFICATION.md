@@ -140,7 +140,7 @@ This specification turns the problem of posthumous intent from an intractable tr
 
 ## Implementation Status
 
-*Last Updated: 2026-01-01*
+*Last Updated: 2026-02-12*
 
 ### Smart Contracts
 
@@ -180,7 +180,7 @@ All core smart contracts are implemented (6 core + 9 oracle/verifier):
 | ~~License Suggester~~ | ~~`scripts/license_suggester.py`~~ | Removed | Removed in Phase 0 refocus — different problem domain (pre-mortem), added Python/Ollama dependency |
 | ZK Proof Generator | `scripts/zk/zkProofGenerator.js` | Implemented | Off-chain proof generation SDK |
 | Circuit Build Script | `scripts/zk/build_circuits.sh` | Implemented | Compile circuits and generate keys |
-| Test Suite | `test/FIESystem.test.js` | Basic | Core functionality tested, ~30% coverage |
+| Test Suite | `test/` (11 files) | Expanded | 80%+ coverage enforced in CI (Phase 2) |
 
 ---
 
@@ -211,10 +211,10 @@ All core smart contracts are implemented (6 core + 9 oracle/verifier):
 
 | Feature | Current State | Gap |
 |---------|---------------|-----|
-| **Oracle Integration** | ChainlinkAdapter + UMAAdapter + OracleRegistry + ZKVerifierAdapter | Production ZK circuits pending |
-| **Political Activity Filtering** | Basic keyword matching | Needs LLM-based intent classification |
-| **Semantic Search** | Exact keyword lookup | No vector embeddings or fuzzy matching |
-| **Test Coverage** | Basic unit tests | Missing integration, security, and gas tests |
+| **Oracle Integration** | ChainlinkAdapter + UMAAdapter + OracleRegistry + ZKVerifierAdapter | Production ZK circuits pending; no end-to-end oracle test in CI |
+| **Political Activity Filtering** | Multi-layer detection: word-boundary matching, homoglyph protection, misspelling detection, primary/secondary keyword classification (Phase 3) | LLM-based intent classification would improve coverage of novel political terms |
+| **Semantic Search** | Resolution cache with off-chain indexer; OpenAI `text-embedding-3-small` support (Phase 6); TF-IDF fallback for testing | Production-grade embedding pipeline needs hardening |
+| **Test Coverage** | 11 Hardhat test files, 7 Foundry fuzz test files, CI gates on 80% coverage (Phase 2) | Target 90%+ before external audit |
 
 ---
 
@@ -226,7 +226,7 @@ All core smart contracts are implemented (6 core + 9 oracle/verifier):
 |---|---------|-------------|--------|
 | 1 | **External Security Audit** | Internal audit complete, external audit pending | Partial |
 | 2 | **Formal Verification** | Certora specs written, SMTChecker configured, verification pending | Partial |
-| 3 | **Comprehensive Test Suite** | Current coverage ~30%, need 90%+ with fuzzing | Pending |
+| 3 | **Comprehensive Test Suite** | 80%+ coverage enforced in CI; 11 Hardhat + 7 Foundry fuzz test files | Mostly Complete (target 90%+ for audit) |
 | 4 | **Enhanced Oracle Integration** | OracleRegistry, ChainlinkAdapter, UMAAdapter, ZKVerifierAdapter implemented; production ZK circuits pending | Mostly Complete |
 | 5 | **Frontend/UI** | React dashboard with full functionality | ✅ Complete |
 
@@ -236,8 +236,8 @@ All core smart contracts are implemented (6 core + 9 oracle/verifier):
 |---|---------|-------------|
 | 6 | **LLM-Assisted Intent Parsing** | Spec mentions but not implemented - AI clarity checking |
 | 7 | **Multi-Chain Deployment & Escrow** | Mentioned in threat model, currently single-chain only |
-| 8 | **Vector Embeddings for Semantic Search** | Basic keyword matching only, no similarity search |
-| 9 | **Monitoring Dashboard** | Events defined but no real-time monitoring |
+| 8 | **Vector Embeddings for Semantic Search** | Resolution cache + off-chain indexer (Phase 4); OpenAI embeddings (Phase 6); needs production hardening |
+| 9 | **Monitoring Dashboard** | React MonitoringDashboard page implemented in frontend |
 | 10 | **IPFS Pinning Service Integration** | URIs stored but no active pinning or redundancy |
 
 ### Medium Priority
@@ -272,10 +272,10 @@ These constraints are hard-coded and cannot be changed:
 | Constraint | Implementation | Location |
 |------------|---------------|----------|
 | **20-Year Sunset** | `SUNSET_DURATION = 20 * 365 days` | `SunsetProtocol.sol`, `ExecutionAgent.sol` |
-| **95% Confidence Threshold** | `CONFIDENCE_THRESHOLD = 95` | `ExecutionAgent.sol:26` |
-| **No Political Agency** | `_isProhibitedAction()` function | `ExecutionAgent.sol:293-308` |
-| **Corpus Immutability** | `freezeCorpus()` with `isFrozen` flag | `LexiconHolder.sol:65-84` |
-| **Inaction Default** | Return on `confidence < 95` | `ExecutionAgent.sol:138-141` |
+| **95% Confidence Threshold** | `CONFIDENCE_THRESHOLD = 95` | `ExecutionAgent.sol:41` |
+| **No Political Agency** | `PoliticalFilter.checkAction()` via `_isProhibitedAction()` | `ExecutionAgent.sol:165, 367-379` |
+| **Corpus Immutability** | `freezeCorpus()` with `isFrozen` flag | `LexiconHolder.sol:88` |
+| **Inaction Default** | Return on `confidence < 95` | `ExecutionAgent.sol:184` |
 
 ---
 
@@ -305,14 +305,15 @@ The Finite Intent Executor core contracts are implemented and functional. The sy
 
 **Key Gaps:**
 - External security audit pending (internal audit complete)
-- Limited testing coverage (~30%, need 90%+)
+- Test coverage at 80%+ CI gate; target 90%+ before audit
 - Trusted setup ceremony for production ZK circuits pending
-- Basic keyword-based filtering (not LLM-based)
+- Multi-layer keyword-based political filtering (Phase 3); LLM-based classification would improve coverage
+- Off-chain indexer needs production hardening (real embeddings proven in Phase 6 E2E test)
 
-**Production Readiness:** Requires additional development in security and testing before mainnet deployment. Frontend is complete.
+**Production Readiness:** Requires external audit, indexer hardening, and testnet deployment before mainnet. See [REFOCUS_PLAN.md](REFOCUS_PLAN.md) Phase 8.
 
 ---
 
 *This specification document consolidates information from all repository documentation. For detailed architecture see [ARCHITECTURE.md](ARCHITECTURE.md), for usage examples see [USAGE.md](docs/archive/USAGE.md).*
 
-*Last Updated: 2026-01-01*
+*Last Updated: 2026-02-12*
