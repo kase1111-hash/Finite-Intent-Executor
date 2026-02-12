@@ -54,8 +54,8 @@ export class ChainSubmitter {
   /**
    * Submits a single resolution result on-chain.
    *
-   * Confidence scores are converted from floating-point [0, 1] to fixed-point
-   * basis points [0, 10000] for on-chain storage (1 = 0.01%).
+   * Confidence scores are converted from floating-point [0, 1] to the on-chain
+   * integer scale [0, 100] used by LexiconHolder (CONFIDENCE_THRESHOLD = 95).
    *
    * @param creator      - Address of the corpus creator.
    * @param query        - The query that was resolved.
@@ -74,9 +74,9 @@ export class ChainSubmitter {
       );
     }
 
-    // Convert float confidences to basis points (uint256 on-chain).
-    const bpConfidences = confidences.map((c) =>
-      BigInt(Math.round(Math.max(0, Math.min(1, c)) * 10000))
+    // Convert float confidences [0,1] to on-chain integer scale [0,100].
+    const onChainConfidences = confidences.map((c) =>
+      BigInt(Math.round(Math.max(0, Math.min(1, c)) * 100))
     );
 
     console.log(
@@ -88,7 +88,7 @@ export class ChainSubmitter {
       creator,
       query,
       citations,
-      bpConfidences
+      onChainConfidences
     );
     const receipt = await tx.wait();
 
@@ -125,10 +125,10 @@ export class ChainSubmitter {
       );
     }
 
-    // Convert all confidence arrays to basis points.
-    const bpConfidencesArray = confidencesArray.map((confs) =>
+    // Convert all confidence arrays from [0,1] to on-chain [0,100].
+    const onChainConfidencesArray = confidencesArray.map((confs) =>
       confs.map((c) =>
-        BigInt(Math.round(Math.max(0, Math.min(1, c)) * 10000))
+        BigInt(Math.round(Math.max(0, Math.min(1, c)) * 100))
       )
     );
 
@@ -141,7 +141,7 @@ export class ChainSubmitter {
       creator,
       queries,
       citationsArray,
-      bpConfidencesArray
+      onChainConfidencesArray
     );
     const receipt = await tx.wait();
 

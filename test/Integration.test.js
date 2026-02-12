@@ -120,7 +120,7 @@ describe("Integration Tests - Full Lifecycle", function () {
       // Create semantic indices
       await lexiconHolder.createSemanticIndex(
         creator.address,
-        "fund_project",
+        "fund_project:fund_project",
         ["Fund aligned open source projects"],
         [97]
       );

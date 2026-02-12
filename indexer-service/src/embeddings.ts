@@ -13,6 +13,8 @@
  */
 
 import { EmbeddingProvider } from "./types";
+import { TfIdfEmbeddingProvider } from "./providers/tfidf";
+import { OpenAIEmbeddingProvider } from "./providers/openai";
 
 // ---------------------------------------------------------------------------
 // Mock provider (bag-of-words + cosine similarity)
@@ -138,14 +140,19 @@ export function createEmbeddingProvider(model: string): EmbeddingProvider {
     case "mock":
       return new MockEmbeddingProvider();
 
-    // Example placeholder for a real provider:
-    // case "openai":
-    //   return new OpenAIEmbeddingProvider(process.env.OPENAI_API_KEY!);
+    case "tfidf":
+      return new TfIdfEmbeddingProvider();
+
+    case "openai":
+      return new OpenAIEmbeddingProvider(
+        process.env.OPENAI_API_KEY || "",
+        process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small"
+      );
 
     default:
       throw new Error(
         `Unknown embedding model: "${model}". ` +
-          `Supported models: "mock". ` +
+          `Supported models: "mock", "tfidf", "openai". ` +
           `Implement the EmbeddingProvider interface to add custom models.`
       );
   }

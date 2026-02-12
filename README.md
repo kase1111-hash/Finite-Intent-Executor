@@ -19,12 +19,40 @@ Whether you need **blockchain will execution**, **automated digital legacy** man
 
 **FIE allows human intent to execute faithfully beyond life, without allowing power to outlive relevance.**
 
-## What Problem Does This Solve?
+## What Does FIE Actually Do? — The Alex Chen Scenario
 
-- **What happens to crypto when you die?** FIE ensures your digital assets are managed according to your wishes through smart contracts that execute your intent posthumously.
-- **Need a digital will smart contract?** FIE captures your goals, assets, and instructions in an immutable, cryptographically secure format.
-- **Looking for posthumous blockchain execution?** The system activates only after verified death triggers (deadman switch, trusted quorum, or oracle verification).
-- **Want a dead man's switch for cryptocurrency?** FIE implements a true dead man's wallet with automatic execution and mandatory 20-year sunset.
+Alex Chen is an independent musician ("Midnight Waves" album series) and open-source developer. In January 2027, Alex freezes their intent into FIE:
+
+**What Alex captured:**
+- License music catalog to streaming platforms (70/30 royalty split, non-exclusive only)
+- Fund open-source digital rights projects (max $5,000 per project)
+- Maintain personal website for 10 years, then archive to IPFS
+- All IP transitions to CC0 (public domain) after 20-year sunset
+
+Alex also freezes a **corpus** — 12 documents of blog posts, emails, and notes that express their values and preferences in their own words. This corpus is hashed on-chain and stored on IPFS.
+
+Alex configures a **deadman switch** (30-day check-in interval) and names two trusted signers.
+
+**What happens when Alex stops checking in:**
+
+The deadman switch triggers after 31 days of silence. The executor activates. An off-chain indexer computes semantic similarity between proposed actions and Alex's frozen corpus, then submits confidence scores on-chain. Three things can happen:
+
+| Proposed Action | Confidence | Outcome |
+|----------------|-----------|---------|
+| "Distribute streaming royalties to digital rights orgs" | **96%** | **Executed** — directly aligned with corpus ("The music funds the mission") |
+| "Archive website to IPFS" | 78% | **Inaction** — intent is clear but below 95% threshold; needs higher-quality embedding or explicit index entry |
+| "Sell exclusive music rights to one label" | 27% | **Inaction** — contradicts corpus ("never sell exclusive rights") |
+| "Invest in cryptocurrency trading" | 7% | **Inaction** — not mentioned anywhere in corpus |
+| "Donate to Senator Smith's campaign" | N/A | **Blocked** — PoliticalFilter catches it before confidence is checked |
+
+**Default to inaction** means the system does nothing. It would rather fail to act on something Alex wanted than act on something they didn't. This is the core safety property.
+
+**After 20 years**, the system sunsets automatically. All of Alex's music, code, and writing enters the public domain (CC0). The executor becomes permanently inactive. No entity can extend, modify, or revive it.
+
+Run this scenario yourself:
+```bash
+npm test test/E2ERealisticScenario.test.js
+```
 
 ## Quick Start
 
@@ -255,38 +283,8 @@ This project is dedicated to the public domain under the CC0 1.0 Universal licen
 
 ## Part of the NatLangChain Ecosystem
 
-Finite Intent Executor is part of a broader ecosystem of projects focused on **natural language programming**, **intent preservation**, **digital sovereignty**, and the **authenticity economy**—valuing human cognitive labor and human-AI collaboration.
-
-### NatLangChain Ecosystem
-
-| Repository | Description |
-|------------|-------------|
-| [NatLangChain](https://github.com/kase1111-hash/NatLangChain) | Prose-first, intent-native blockchain protocol for recording human intent in natural language |
-| [IntentLog](https://github.com/kase1111-hash/IntentLog) | Git for human reasoning—tracks "why" changes happen via prose commits |
-| [RRA-Module](https://github.com/kase1111-hash/RRA-Module) | Revenant Repo Agent: Converts abandoned repositories into autonomous AI agents for licensing |
-| [mediator-node](https://github.com/kase1111-hash/mediator-node) | LLM mediation layer for matching, negotiation, and closure proposals |
-| [ILR-module](https://github.com/kase1111-hash/ILR-module) | IP & Licensing Reconciliation: Dispute resolution for intellectual property conflicts |
-
-### Agent-OS Ecosystem
-
-| Repository | Description |
-|------------|-------------|
-| [Agent-OS](https://github.com/kase1111-hash/Agent-OS) | Natural-language native operating system for AI agents (NLOS) |
-| [synth-mind](https://github.com/kase1111-hash/synth-mind) | NLOS-based agent with psychological modules for emergent continuity and empathy |
-| [boundary-daemon-](https://github.com/kase1111-hash/boundary-daemon-) | Trust enforcement layer defining cognition boundaries for Agent OS |
-| [memory-vault](https://github.com/kase1111-hash/memory-vault) | Secure, offline-capable, owner-sovereign storage for cognitive artifacts |
-| [value-ledger](https://github.com/kase1111-hash/value-ledger) | Economic accounting layer for cognitive work (ideas, effort, novelty) |
-| [learning-contracts](https://github.com/kase1111-hash/learning-contracts) | Safety protocols for AI learning and data management |
-| [Boundary-SIEM](https://github.com/kase1111-hash/Boundary-SIEM) | Security Information and Event Management for AI systems |
-
-### Games & Creative Projects
-
-| Repository | Description |
-|------------|-------------|
-| [Shredsquatch](https://github.com/kase1111-hash/Shredsquatch) | 3D first-person snowboarding infinite runner (SkiFree homage) |
-| [Midnight-pulse](https://github.com/kase1111-hash/Midnight-pulse) | Procedurally generated night drive experience |
-| [Long-Home](https://github.com/kase1111-hash/Long-Home) | Atmospheric indie game built with Godot |
+FIE is part of the [NatLangChain ecosystem](https://github.com/kase1111-hash). See the organization page for related projects.
 
 ---
 
-**Version:** 0.1.0-alpha | **Last Updated:** 2026-01-10
+**Version:** 0.1.0-alpha | **Last Updated:** 2026-02-12

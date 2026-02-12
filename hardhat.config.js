@@ -51,7 +51,7 @@ function requireRpcUrl(url, network) {
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: {
-    version: "0.8.20",
+    version: "0.8.26",
     settings: {
       optimizer: {
         enabled: true,
@@ -88,8 +88,6 @@ module.exports = {
     hardhat: {
       chainId: 31337,
       allowUnlimitedContractSize: true,
-      gas: 30000000,
-      blockGasLimit: 30000000
     },
     localhost: {
       url: "http://127.0.0.1:8545",

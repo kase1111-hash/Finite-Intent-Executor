@@ -1,0 +1,38 @@
+{
+  "creator": "Alex Chen",
+  "description": "Independent musician and open-source developer. Creator of the 'Midnight Waves' album series and contributor to digital rights tooling.",
+  "capturedDate": "2027-01-15",
+  "goals": [
+    {
+      "id": "license-music",
+      "description": "License music catalog to streaming platforms with 70/30 royalty split favoring the estate",
+      "priority": 100,
+      "constraints": "Prefer non-exclusive licenses. 70% to estate, 30% to platform. All major platforms should have access."
+    },
+    {
+      "id": "fund-digital-rights",
+      "description": "Fund open-source projects aligned with digital rights, maximum $5,000 per project",
+      "priority": 90,
+      "constraints": "Only fund projects with active maintainers. Maximum $5,000 per project. Focus on digital rights, privacy, and creative commons tooling."
+    },
+    {
+      "id": "maintain-website",
+      "description": "Maintain personal website for 10 years, then archive to IPFS",
+      "priority": 70,
+      "constraints": "Keep alexchen.dev running for 10 years post-trigger. After 10 years, create a static archive on IPFS and let the domain lapse."
+    },
+    {
+      "id": "sunset-cc0",
+      "description": "All intellectual property transitions to CC0 (public domain) after 20-year sunset",
+      "priority": 100,
+      "constraints": "Non-negotiable. All IP, music, code, and writing enters public domain at sunset."
+    }
+  ],
+  "constraints": {
+    "noPoliticalAgency": true,
+    "defaultToInaction": true,
+    "confidenceThreshold": 95,
+    "sunsetDurationYears": 20,
+    "maxProjectFunding": 5000
+  }
+}
