@@ -28,14 +28,15 @@ contracts/                  # Smart contracts
 └── verifiers/              # ZK proof verifiers
 
 frontend/src/               # React dashboard
-├── pages/                  # Dashboard, IntentCapture, TriggerConfig, etc.
+├── pages/                  # Dashboard, IntentCapture, TriggerConfig, MonitoringDashboard, etc.
 ├── context/                # Web3Context for wallet connection
 └── contracts/              # Contract ABIs
 
-test/                       # Hardhat test suites
+indexer-service/            # Off-chain semantic indexer (TypeScript)
+test/                       # Hardhat test suites (11 files)
+foundry-tests/              # Foundry fuzz tests (7 files)
 scripts/                    # Deployment and utility scripts
 circuits/                   # Circom ZK circuits
-security/                   # Boundary-SIEM/Daemon integration
 ```
 
 ## Common Commands
@@ -70,11 +71,11 @@ These values are hard-coded and immutable by design:
 
 | Constraint | Value | Location |
 |-----------|-------|----------|
-| Sunset Duration | 20 years (7,300 days) | SunsetProtocol.sol |
-| Confidence Threshold | 95% | ExecutionAgent.sol:26 |
-| Political Activity | Blocked entirely | ExecutionAgent.sol:293-308 |
-| Corpus Immutability | Hash-locked after freeze | LexiconHolder.sol:65-84 |
-| Default Behavior | Inaction if confidence < 95% | ExecutionAgent.sol:138-141 |
+| Sunset Duration | 20 years (7,300 days) | SunsetProtocol.sol:42, ExecutionAgent.sol:45 |
+| Confidence Threshold | 95% | ExecutionAgent.sol:41 |
+| Political Activity | Blocked entirely | ExecutionAgent.sol:165 (via PoliticalFilter.checkAction) |
+| Corpus Immutability | Hash-locked after freeze | LexiconHolder.sol:88 |
+| Default Behavior | Inaction if confidence < 95% | ExecutionAgent.sol:184 |
 
 ## Trigger Types
 
@@ -87,7 +88,7 @@ These values are hard-coded and immutable by design:
 - ReentrancyGuard on all value transfers
 - OpenZeppelin AccessControl for role management
 - State-before-transfer pattern in payment functions
-- Bounded loops (MAX_GOALS=50, MAX_ASSETS=100, MAX_WITNESSES=10)
+- Bounded loops (MAX_GOALS=50, MAX_ASSETS=100, MAX_ORACLES=10)
 - ErrorHandler library with SIEM-compatible event formatting
 - PoliticalFilter with multi-layer content detection
 
@@ -115,10 +116,11 @@ BOUNDARY_SIEM_ENDPOINT=    # Security monitoring (optional)
 
 ## Contract Roles
 
-- `ADMIN_ROLE` - System administration
-- `EXECUTOR_ROLE` - Can execute intents after trigger
-- `TRIGGER_ROLE` - Can submit trigger verifications
-- `ORACLE_ROLE` - Oracle adapters for death verification
+- `EXECUTOR_ROLE` - Can execute intents after trigger (ExecutionAgent)
+- `ORACLE_ROLE` - Oracle adapters for death verification (ExecutionAgent)
+- `INDEXER_ROLE` - Can freeze corpus, create indices, manage clusters (LexiconHolder)
+- `SUNSET_OPERATOR_ROLE` - Can initiate sunset, archive assets (SunsetProtocol)
+- `MINTER_ROLE` - Can mint new IP tokens (IPToken)
 
 ## Important Notes
 
