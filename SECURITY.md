@@ -175,6 +175,8 @@ Array bounds have been added to prevent DoS attacks:
 - Archive batch size: MAX_ARCHIVE_BATCH_SIZE = 50
 - Trusted signers: MAX_TRUSTED_SIGNERS = 20
 - Oracles: MAX_ORACLES = 10
+- Requests per creator (oracle adapters): MAX_REQUESTS_PER_CREATOR = 1000
+- Verification keys (ZK/Groth16/PLONK): MAX_VERIFICATION_KEYS = 100
 
 **Note:** These limits should be sufficient for normal operation while preventing gas exhaustion attacks.
 
@@ -338,13 +340,29 @@ Full codebase security audit covering all 17 Solidity contracts (~6,400 LOC), fr
 - **I-5 FIXED**: CSP header added to frontend
 - **I-17 FIXED**: Dependabot configuration added
 
-**Remaining (not yet implemented):**
+**Additional fixes (second pass):**
+- **M-3 FIXED**: Removed auto-authorization of deployer as operator in ChainlinkAdapter
+- **M-11 FIXED**: Bounded `creatorRequests` arrays (MAX_REQUESTS_PER_CREATOR=1000) in ChainlinkAdapter, UMAAdapter, ZKVerifierAdapter
+- **M-12 FIXED**: Bounded `keyIds` arrays (MAX_VERIFICATION_KEYS=100) in Groth16Verifier, PlonkVerifier, ZKVerifierAdapter
+- **M-19 FIXED**: Leet-speak normalization added to PoliticalFilter
+- **M-20 FIXED**: Expanded misspelling dictionary (party names, senator, ballot, partisan)
+- **M-21 FIXED**: Promoted republican/democrat from secondary to primary keywords
+- **M-22 FIXED**: Removed unused ErrorHandler import from ExecutionAgent
+- **L-3 FIXED**: `disputeVerification` restricted to request creator in ChainlinkAdapter
+- **L-5 FIXED**: Round-up confidence averaging in OracleRegistry
+- **L-6 FIXED**: Use `forceApprove` in UMAAdapter for ERC20 approve-reset safety
+- **L-14 FIXED**: Zero-address checks in UMAAdapter constructor
+- **L-15 FIXED**: Intent overwrite prevention in IntentCaptureModule.captureIntent
+- **L-16 FIXED**: Zero-address/hash validation in SunsetProtocol.archiveAssets
+- **L-18 FIXED**: Completion flag prevents double `completeSunset`
+- **L-19 FIXED**: Distinct `RequestExpired` event in ChainlinkAdapter
+- **L-20 FIXED**: Proportional revenue tracking per license in IPToken.payRoyalty
+
+**Remaining (acknowledged/design decisions):**
 - M-6: Oracle reputation system redesign (acknowledged as design limitation)
 - M-9/10: Front-running mitigations (acknowledged)
-- M-11/12: Unbounded arrays in oracle adapters and verifiers
-- M-19/20/21: PoliticalFilter leet-speak normalization and party term promotion
-- M-22: ErrorHandler library removal
-- L-3 through L-24 (remaining low findings)
+- L-11: `block.timestamp` nondeterminism as ZK public input (acknowledged)
+- L-23/L-24: PoliticalFilter ASCII-only restriction and gas cost (acknowledged)
 
 ### 2026-02-08 - Refocus Plan Phases 0-4
 
