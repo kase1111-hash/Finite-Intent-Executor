@@ -4,7 +4,9 @@
 
 This document provides security information for the Finite Intent Executor (FIE) smart contract system, including audit findings, known issues, and security best practices.
 
-**Audit Status:** Internal review completed 2025-12-23. External audit pending.
+**Audit Status:** Internal review completed 2025-12-23. Comprehensive automated security audit completed 2026-02-20. External audit pending.
+
+> **Latest audit report:** See [SECURITY_AUDIT_REPORT.md](./SECURITY_AUDIT_REPORT.md) for the full 2026-02-20 audit with 52 smart contract findings and 19 infrastructure findings.
 
 ---
 
@@ -281,6 +283,7 @@ Focus areas for future audits:
 
 | Date | Auditor | Type | Findings |
 |------|---------|------|----------|
+| 2026-02-20 | Automated (Claude Code) | Full Codebase Security Audit | 3 Critical, 4 High, 22 Medium, 23 Low + 19 infra |
 | 2025-12-23 | Internal | Security Review | 4 Critical, 9 High, 12 Medium, 6 Low |
 
 ---
@@ -308,6 +311,21 @@ Before mainnet deployment, engage external auditors to:
 ---
 
 ## Changelog
+
+### 2026-02-20 - Comprehensive Security Audit
+
+Full codebase security audit covering all 17 Solidity contracts (~6,400 LOC), frontend, scripts, CI/CD, and dependencies. See [SECURITY_AUDIT_REPORT.md](./SECURITY_AUDIT_REPORT.md) for the complete report.
+
+**New findings not in previous audits:**
+- **CRITICAL**: PlonkVerifier is a non-functional placeholder accepting any structurally valid proof (C-1)
+- **CRITICAL**: Direct oracle mode accepts any non-empty bytes as proof for irreversible execution (C-2)
+- **CRITICAL**: Single deployer key controls all 13 contracts' admin roles (C-3)
+- **HIGH**: ZKVerifierAdapter falls back to non-cryptographic placeholder on 3 code paths (H-1)
+- **HIGH**: `activateSunset()` has no access control, bypasses SunsetProtocol workflow (H-2)
+- **HIGH**: INDEXER_ROLE is single trust root for all execution authorization (H-4)
+- 22 Medium findings (access control, oracle manipulation, DoS, input validation, PoliticalFilter bypass, dead code)
+- 23 Low findings (reentrancy, precision, events, validation, logic)
+- 19 Infrastructure findings (credentials, frontend, scripts, CI/CD)
 
 ### 2026-02-08 - Refocus Plan Phases 0-4
 
