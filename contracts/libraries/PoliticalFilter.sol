@@ -104,6 +104,11 @@ library PoliticalFilter {
         if (_containsCI(actionBytes, "congressman")) return (true, "congressman");
         if (_containsCI(actionBytes, "parliament")) return (true, "parliament");
 
+        // Party keywords [Audit fix: M-21] — promoted from secondary to primary
+        // These are unambiguous political party references
+        if (_containsCIWordBoundary(actionBytes, "republican")) return (true, "republican");
+        if (_containsCIWordBoundary(actionBytes, "democrat")) return (true, "democrat");
+
         return (false, "");
     }
 
@@ -141,9 +146,8 @@ library PoliticalFilter {
         if (_containsCIWordBoundary(actionBytes, "persuade")) return (true, "persuade");
         if (_containsCIWordBoundary(actionBytes, "sway")) return (true, "sway");
 
-        // Party terms
-        if (_containsCIWordBoundary(actionBytes, "republican")) return (true, "republican");
-        if (_containsCIWordBoundary(actionBytes, "democrat")) return (true, "democrat");
+        // Party terms [Audit fix: M-21] — republican/democrat promoted to primary
+        // conservative/liberal kept as secondary (high false-positive rate)
         if (_containsCIWordBoundary(actionBytes, "conservative")) return (true, "conservative");
         if (_containsCIWordBoundary(actionBytes, "liberal")) return (true, "liberal");
 
@@ -184,6 +188,30 @@ library PoliticalFilter {
     // ============================================================
     // MAIN FILTER FUNCTION
     // ============================================================
+
+    /**
+     * @dev Normalize common leet-speak substitutions back to ASCII letters
+     *      [Audit fix: M-19] Prevents bypass via "3lect1on", "v0te", etc.
+     * @notice Only handles single-byte substitutions. Multi-character sequences
+     *         (e.g., "|_|" for U) are not normalized due to gas constraints.
+     */
+    function _normalizeLeetSpeak(bytes memory input) private pure returns (bytes memory) {
+        bytes memory output = new bytes(input.length);
+        for (uint256 i = 0; i < input.length; i++) {
+            bytes1 b = input[i];
+            if (b == "0") output[i] = "o";
+            else if (b == "1") output[i] = "i";
+            else if (b == "3") output[i] = "e";
+            else if (b == "4") output[i] = "a";
+            else if (b == "5") output[i] = "s";
+            else if (b == "7") output[i] = "t";
+            else if (b == "@") output[i] = "a";
+            else if (b == "$") output[i] = "s";
+            else if (b == "!") output[i] = "i";
+            else output[i] = b;
+        }
+        return output;
+    }
 
     /**
      * @dev Main filter function - performs comprehensive political activity check
@@ -245,6 +273,19 @@ library PoliticalFilter {
                 category: _inferCategory(misspellTerm),
                 matchedTerm: misspellTerm,
                 confidenceScore: 90
+            });
+        }
+
+        // Layer 2.7: Leet-speak normalization pass [Audit fix: M-19]
+        // Re-check primary keywords after normalizing common substitutions
+        bytes memory normalizedBytes = _normalizeLeetSpeak(actionBytes);
+        (bool leetMatch, string memory leetTerm) = _isPrimaryPoliticalKeyword(normalizedBytes);
+        if (leetMatch) {
+            return FilterResult({
+                isProhibited: true,
+                category: _inferCategory(leetTerm),
+                matchedTerm: leetTerm,
+                confidenceScore: 85
             });
         }
 
@@ -534,6 +575,27 @@ library PoliticalFilter {
         if (_containsCI(actionBytes, "legistation")) return (true, "legislation");
         if (_containsCI(actionBytes, "legeslation")) return (true, "legislation");
         if (_containsCI(actionBytes, "legislaton")) return (true, "legislation");
+
+        // [Audit fix: M-20] Expanded misspelling dictionary
+        // Party name misspellings
+        if (_containsCI(actionBytes, "republcan")) return (true, "republican");
+        if (_containsCI(actionBytes, "republikan")) return (true, "republican");
+        if (_containsCI(actionBytes, "democat")) return (true, "democrat");
+        if (_containsCI(actionBytes, "demokrat")) return (true, "democrat");
+
+        // Senator/congress misspellings
+        if (_containsCI(actionBytes, "sentor")) return (true, "senator");
+        if (_containsCI(actionBytes, "senatir")) return (true, "senator");
+        if (_containsCI(actionBytes, "congres")) return (true, "congressman");
+        if (_containsCI(actionBytes, "congresman")) return (true, "congressman");
+
+        // Ballot misspellings
+        if (_containsCI(actionBytes, "balot")) return (true, "ballot");
+        if (_containsCI(actionBytes, "ballott")) return (true, "ballot");
+
+        // Partisan misspellings
+        if (_containsCI(actionBytes, "partsan")) return (true, "partisan");
+        if (_containsCI(actionBytes, "partysan")) return (true, "partisan");
 
         return (false, "");
     }

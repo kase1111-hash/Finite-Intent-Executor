@@ -88,6 +88,9 @@ contract Groth16Verifier is Ownable2Step {
     /// @notice BN254 curve order
     uint256 public constant PRIME_Q = 21888242871839275222246405745257275088696311157297823662689037894645226208583;
 
+    /// @notice Maximum verification keys to prevent unbounded array growth [Audit fix: M-12]
+    uint256 public constant MAX_VERIFICATION_KEYS = 100;
+
     /// @notice Registered verification keys
     mapping(bytes32 => VerificationKey) public verificationKeys;
 
@@ -129,6 +132,8 @@ contract Groth16Verifier is Ownable2Step {
         if (_ic.length < 2) {
             revert InvalidVerificationKey();
         }
+        // [Audit fix: M-12]
+        require(keyIds.length < MAX_VERIFICATION_KEYS, "Verification key limit reached");
 
         VerificationKey storage vk = verificationKeys[_keyId];
         vk.alpha = _alpha;

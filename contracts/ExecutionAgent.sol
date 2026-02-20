@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./libraries/PoliticalFilter.sol";
-import "./libraries/ErrorHandler.sol";
+// [Audit fix: M-22] Removed unused ErrorHandler import
 
 interface ILexiconHolder {
     function resolveAmbiguity(

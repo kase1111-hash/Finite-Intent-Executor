@@ -280,8 +280,9 @@ contract OracleRegistry is Ownable2Step, ReentrancyGuard {
             agg.positiveVerifications++;
         }
 
-        // Update running average
-        agg.averageConfidence = ((agg.averageConfidence * (agg.receivedVerifications - 1)) + _confidence) / agg.receivedVerifications;
+        // Update running average [Audit fix: L-5] — round up to avoid truncation below threshold
+        uint256 numerator = (agg.averageConfidence * (agg.receivedVerifications - 1)) + _confidence;
+        agg.averageConfidence = (numerator + agg.receivedVerifications - 1) / agg.receivedVerifications;
 
         emit OracleVerificationReceived(_aggregationId, msg.sender, _isVerified, _confidence);
 

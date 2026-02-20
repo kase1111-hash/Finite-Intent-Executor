@@ -181,17 +181,31 @@ contract IPToken is ERC721, ERC721URIStorage, AccessControl, ReentrancyGuard {
         address recipient = royaltyInfo.recipient;
 
         // Update revenue for active licenses FIRST (checks-effects-interactions)
+        // [Audit fix: L-20] — distribute proportionally instead of crediting full amount to each
         License[] storage tokenLicenses = licenses[_tokenId];
         uint256 iterLimit = tokenLicenses.length > MAX_LICENSES_PER_TOKEN
             ? MAX_LICENSES_PER_TOKEN
             : tokenLicenses.length;
+        uint256 activeLicenseCount = 0;
         for (uint i = 0; i < iterLimit; i++) {
             if (
                 tokenLicenses[i].isActive &&
                 block.timestamp >= tokenLicenses[i].startTime &&
                 block.timestamp <= tokenLicenses[i].endTime
             ) {
-                tokenLicenses[i].revenueGenerated += msg.value;
+                activeLicenseCount++;
+            }
+        }
+        if (activeLicenseCount > 0) {
+            uint256 perLicenseShare = msg.value / activeLicenseCount;
+            for (uint i = 0; i < iterLimit; i++) {
+                if (
+                    tokenLicenses[i].isActive &&
+                    block.timestamp >= tokenLicenses[i].startTime &&
+                    block.timestamp <= tokenLicenses[i].endTime
+                ) {
+                    tokenLicenses[i].revenueGenerated += perLicenseShare;
+                }
             }
         }
 

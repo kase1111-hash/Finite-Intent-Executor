@@ -58,6 +58,7 @@ contract SunsetProtocol is AccessControl {
         bool assetsArchived;
         bool ipTransitioned;
         bool clustered;
+        bool completed;           // [Audit fix: L-18] prevents double completion
         LicenseType postSunsetLicense;
         string archiveURI;
     }
@@ -119,6 +120,7 @@ contract SunsetProtocol is AccessControl {
             assetsArchived: false,
             ipTransitioned: false,
             clustered: false,
+            completed: false,
             postSunsetLicense: LicenseType.CC0,
             archiveURI: ""
         });
@@ -155,6 +157,8 @@ contract SunsetProtocol is AccessControl {
         require(_assetAddresses.length <= MAX_ARCHIVE_BATCH_SIZE, "Batch size exceeds limit");
 
         for (uint i = 0; i < _assetAddresses.length; i++) {
+            require(_assetAddresses[i] != address(0), "Zero asset address"); // [Audit fix: L-16]
+            require(_assetHashes[i] != bytes32(0), "Zero asset hash"); // [Audit fix: L-16]
             AssetArchive memory archive = AssetArchive({
                 assetAddress: _assetAddresses[i],
                 storageURI: _storageURIs[i],
@@ -235,7 +239,9 @@ contract SunsetProtocol is AccessControl {
         require(state.assetsArchived, "Assets not archived");
         require(state.ipTransitioned, "IP not transitioned");
         require(state.clustered, "Legacy not clustered");
+        require(!state.completed, "Sunset already completed"); // [Audit fix: L-18]
 
+        state.completed = true; // [Audit fix: L-18]
         emit SunsetCompleted(_creator, block.timestamp);
     }
 
@@ -314,6 +320,7 @@ contract SunsetProtocol is AccessControl {
             assetsArchived: false,
             ipTransitioned: false,
             clustered: false,
+            completed: false,
             postSunsetLicense: LicenseType.CC0,
             archiveURI: ""
         });

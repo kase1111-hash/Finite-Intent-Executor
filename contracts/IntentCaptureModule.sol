@@ -88,6 +88,7 @@ contract IntentCaptureModule is Ownable2Step {
         uint256 _corpusEndYear,
         address[] memory _assetAddresses
     ) external notTriggered notRevoked {
+        require(intents[msg.sender].intentHash == bytes32(0), "Intent already captured"); // [Audit fix: L-15]
         require(_corpusEndYear > _corpusStartYear, "Invalid corpus window");
         require(_corpusEndYear - _corpusStartYear >= 5 && _corpusEndYear - _corpusStartYear <= 10,
                 "Corpus window must be 5-10 years");

@@ -37,6 +37,12 @@ contract ZKVerifierAdapter is IOracle, Ownable2Step, ReentrancyGuard {
     /// @dev Confidence score for valid ZK proofs (always 100 - binary)
     uint256 public constant ZK_CONFIDENCE = 100;
 
+    /// @dev Maximum requests per creator to prevent unbounded array growth [Audit fix: M-11]
+    uint256 public constant MAX_REQUESTS_PER_CREATOR = 1000;
+
+    /// @dev Maximum verification keys to prevent unbounded array growth [Audit fix: M-12]
+    uint256 public constant MAX_VERIFICATION_KEYS = 100;
+
     /// @dev Whether the oracle is currently accepting requests
     bool private _isActive;
 
@@ -225,6 +231,9 @@ contract ZKVerifierAdapter is IOracle, Ownable2Step, ReentrancyGuard {
         // [Audit fix: H-1 supp] STARK verification is not implemented — block registration
         require(_proofSystem != IZKVerifier.ProofSystem.STARK, "STARK verification not yet implemented");
 
+        // [Audit fix: M-12]
+        require(keyIds.length < MAX_VERIFICATION_KEYS, "Verification key limit reached");
+
         verificationKeys[_keyId] = VerificationKeyData({
             keyId: _keyId,
             proofSystem: _proofSystem,
@@ -286,7 +295,8 @@ contract ZKVerifierAdapter is IOracle, Ownable2Step, ReentrancyGuard {
             confidenceScore: 0
         });
 
-        // Track request for creator
+        // Track request for creator [Audit fix: M-11]
+        require(creatorRequests[_creator].length < MAX_REQUESTS_PER_CREATOR, "Request limit reached");
         creatorRequests[_creator].push(requestId);
 
         emit VerificationRequested(requestId, _creator, _eventType, block.timestamp);

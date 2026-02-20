@@ -75,6 +75,9 @@ contract UMAAdapter is IOracle, Ownable2Step, ReentrancyGuard {
     /// @dev Default bond amount (in currency tokens)
     uint256 public constant DEFAULT_BOND = 1000e18;
 
+    /// @dev Maximum requests per creator to prevent unbounded array growth [Audit fix: M-11]
+    uint256 public constant MAX_REQUESTS_PER_CREATOR = 1000;
+
     /// @dev Whether the oracle is currently accepting requests
     bool private _isActive;
 
@@ -135,6 +138,8 @@ contract UMAAdapter is IOracle, Ownable2Step, ReentrancyGuard {
         uint256 _bondAmount,
         uint64 _liveness
     ) Ownable(msg.sender) {
+        require(_optimisticOracle != address(0), "Invalid oracle address"); // [Audit fix: L-14]
+        require(_bondCurrency != address(0), "Invalid currency address"); // [Audit fix: L-14]
         optimisticOracle = IOptimisticOracleV3(_optimisticOracle);
         bondCurrency = IERC20(_bondCurrency);
         bondAmount = _bondAmount > 0 ? _bondAmount : DEFAULT_BOND;
@@ -234,7 +239,8 @@ contract UMAAdapter is IOracle, Ownable2Step, ReentrancyGuard {
             confidenceScore: 0
         });
 
-        // Track request for creator
+        // Track request for creator [Audit fix: M-11]
+        require(creatorRequests[_creator].length < MAX_REQUESTS_PER_CREATOR, "Request limit reached");
         creatorRequests[_creator].push(requestId);
 
         emit VerificationRequested(requestId, _creator, _eventType, block.timestamp);
@@ -313,8 +319,8 @@ contract UMAAdapter is IOracle, Ownable2Step, ReentrancyGuard {
         // Transfer bond from asserter
         bondCurrency.safeTransferFrom(msg.sender, address(this), bondAmount);
 
-        // Approve oracle to spend bond
-        bondCurrency.approve(address(optimisticOracle), bondAmount);
+        // Approve oracle to spend bond [Audit fix: L-6] — reset to 0 first for tokens that require it
+        bondCurrency.forceApprove(address(optimisticOracle), bondAmount);
 
         // Make assertion to UMA
         assertionId = optimisticOracle.assertTruth(
@@ -391,8 +397,8 @@ contract UMAAdapter is IOracle, Ownable2Step, ReentrancyGuard {
         // Transfer bond from disputer
         bondCurrency.safeTransferFrom(msg.sender, address(this), bondAmount);
 
-        // Approve oracle to spend bond
-        bondCurrency.approve(address(optimisticOracle), bondAmount);
+        // Approve oracle to spend bond [Audit fix: L-6] — reset to 0 first for tokens that require it
+        bondCurrency.forceApprove(address(optimisticOracle), bondAmount);
 
         // Dispute with UMA
         optimisticOracle.disputeAssertion(assertionId, msg.sender);
