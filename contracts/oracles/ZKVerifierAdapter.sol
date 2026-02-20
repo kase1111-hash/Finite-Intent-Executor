@@ -37,6 +37,9 @@ contract ZKVerifierAdapter is IOracle, Ownable2Step, ReentrancyGuard {
     /// @dev Confidence score for valid ZK proofs (always 100 - binary)
     uint256 public constant ZK_CONFIDENCE = 100;
 
+    /// @dev Maximum acceptable drift between proof timestamp and block.timestamp [Audit fix: L-11]
+    uint256 public constant MAX_PROOF_TIMESTAMP_DRIFT = 1 hours;
+
     /// @dev Maximum requests per creator to prevent unbounded array growth [Audit fix: M-11]
     uint256 public constant MAX_REQUESTS_PER_CREATOR = 1000;
 
@@ -360,6 +363,10 @@ contract ZKVerifierAdapter is IOracle, Ownable2Step, ReentrancyGuard {
      * @param _creatorCommitment Commitment to creator identity (public input)
      * @param _issuerCommitment Commitment to issuer identity (public input)
      * @param _certificateHash Hash of certificate (public input)
+     * @param _proofTimestamp Timestamp used when generating the proof (public input)
+     *        [Audit fix: L-11] Replaces nondeterministic block.timestamp — the prover
+     *        sets this deterministically at proof generation time, and we validate it
+     *        falls within MAX_PROOF_TIMESTAMP_DRIFT of the current block.timestamp.
      * @return success Whether verification succeeded
      *
      * The proof proves:
@@ -374,11 +381,19 @@ contract ZKVerifierAdapter is IOracle, Ownable2Step, ReentrancyGuard {
         bytes calldata _proof,
         bytes32 _creatorCommitment,
         bytes32 _issuerCommitment,
-        bytes32 _certificateHash
+        bytes32 _certificateHash,
+        uint256 _proofTimestamp
     ) external nonReentrant returns (bool success) {
         VerificationRequest storage request = requests[_requestId];
         require(request.requestTimestamp > 0, "Request does not exist");
         require(request.status == VerificationStatus.Pending, "Request not pending");
+
+        // [Audit fix: L-11] Validate caller-supplied proof timestamp
+        require(
+            _proofTimestamp <= block.timestamp &&
+            _proofTimestamp >= block.timestamp - MAX_PROOF_TIMESTAMP_DRIFT,
+            "Proof timestamp outside acceptable window"
+        );
 
         VerificationKeyData memory vk = verificationKeys[_keyId];
         require(vk.isActive, "Verification key not active");
@@ -407,7 +422,8 @@ contract ZKVerifierAdapter is IOracle, Ownable2Step, ReentrancyGuard {
             _issuerCommitment,
             _certificateHash,
             request.creator,
-            request.dataHash
+            request.dataHash,
+            _proofTimestamp
         );
 
         // Update proof status
@@ -445,7 +461,8 @@ contract ZKVerifierAdapter is IOracle, Ownable2Step, ReentrancyGuard {
         bytes32 _issuerCommitment,
         bytes32 _certificateHash,
         address _expectedCreator,
-        bytes32 _expectedDataHash
+        bytes32 _expectedDataHash,
+        uint256 _proofTimestamp
     ) internal view returns (bool) {
         // Sanity checks
         if (_proof.length == 0) {
@@ -474,10 +491,11 @@ contract ZKVerifierAdapter is IOracle, Ownable2Step, ReentrancyGuard {
         VerificationKeyData memory vk = verificationKeys[_keyId];
 
         // Build public inputs array
+        // [Audit fix: L-11] Use caller-supplied timestamp instead of nondeterministic block.timestamp
         uint256[] memory publicInputs = new uint256[](3);
         publicInputs[0] = uint256(_creatorCommitment);
         publicInputs[1] = uint256(_certificateHash);
-        publicInputs[2] = block.timestamp; // currentTimestamp
+        publicInputs[2] = _proofTimestamp;
 
         // Route to appropriate verifier based on proof system
         if (vk.proofSystem == IZKVerifier.ProofSystem.Groth16) {

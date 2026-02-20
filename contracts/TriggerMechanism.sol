@@ -82,6 +82,11 @@ contract TriggerMechanism is Ownable2Step, ReentrancyGuard {
     mapping(address => mapping(address => bool)) public hasSignedTrigger;
     mapping(address => uint256) public signatureCount;
 
+    /// @dev [Audit fix: M-9] Commit-reveal state for deadman switch front-running prevention
+    mapping(address => mapping(address => bytes32)) public deadmanCommits;
+    mapping(address => mapping(address => uint256)) public deadmanCommitBlocks;
+    uint256 public constant COMMIT_REVEAL_DELAY = 2; // blocks
+
     /// @dev Minimum confidence threshold for oracle verification (matches ExecutionAgent)
     uint256 public constant MIN_CONFIDENCE_THRESHOLD = 95;
 
@@ -117,6 +122,9 @@ contract TriggerMechanism is Ownable2Step, ReentrancyGuard {
         address indexed creator,
         bool isValid
     );
+    /// @custom:audit-fix M-9 — commit-reveal events for deadman switch
+    event DeadmanCommitted(address indexed creator, address indexed committer, uint256 blockNumber);
+    event DeadmanExecuted(address indexed creator, address indexed executor);
 
     constructor(address _intentModuleAddress) Ownable(msg.sender) {
         intentModule = IIntentCaptureModule(_intentModuleAddress);
@@ -486,8 +494,32 @@ contract TriggerMechanism is Ownable2Step, ReentrancyGuard {
     }
 
     /**
-     * @dev Execute deadman switch if interval has passed
+     * @dev Commit intent to execute deadman switch (phase 1 of commit-reveal)
      * @param _creator Address of the intent creator
+     * @custom:audit-fix M-9 — prevents front-running of deadman switch execution.
+     *         Caller must commit first, wait COMMIT_REVEAL_DELAY blocks, then reveal.
+     */
+    function commitDeadmanExecution(address _creator) external {
+        TriggerConfig storage config = triggers[_creator];
+        require(config.isConfigured, "Trigger not configured");
+        require(config.triggerType == TriggerType.DeadmanSwitch, "Not a deadman switch");
+        require(!config.isTriggered, "Already triggered");
+        require(
+            block.timestamp >= config.lastCheckIn + config.deadmanInterval,
+            "Deadman interval not elapsed"
+        );
+
+        bytes32 commitment = keccak256(abi.encodePacked(msg.sender, _creator, block.number));
+        deadmanCommits[_creator][msg.sender] = commitment;
+        deadmanCommitBlocks[_creator][msg.sender] = block.number;
+
+        emit DeadmanCommitted(_creator, msg.sender, block.number);
+    }
+
+    /**
+     * @dev Execute deadman switch if interval has passed (phase 2: reveal)
+     * @param _creator Address of the intent creator
+     * @custom:audit-fix M-9 — requires prior commitment to prevent front-running
      */
     function executeDeadmanSwitch(address _creator) external nonReentrant { // [Audit fix: L-2]
         TriggerConfig storage config = triggers[_creator];
@@ -499,6 +531,20 @@ contract TriggerMechanism is Ownable2Step, ReentrancyGuard {
             "Deadman interval not elapsed"
         );
 
+        // [Audit fix: M-9] Commit-reveal: caller must have committed >= COMMIT_REVEAL_DELAY blocks ago
+        uint256 commitBlock = deadmanCommitBlocks[_creator][msg.sender];
+        require(commitBlock > 0, "No commitment found — call commitDeadmanExecution first");
+        require(block.number >= commitBlock + COMMIT_REVEAL_DELAY, "Reveal too early — wait for commit delay");
+
+        // Verify commitment matches
+        bytes32 expected = keccak256(abi.encodePacked(msg.sender, _creator, commitBlock));
+        require(deadmanCommits[_creator][msg.sender] == expected, "Invalid commitment");
+
+        // Clear commitment
+        delete deadmanCommits[_creator][msg.sender];
+        delete deadmanCommitBlocks[_creator][msg.sender];
+
+        emit DeadmanExecuted(_creator, msg.sender);
         _executeTrigger(_creator, config);
     }
 

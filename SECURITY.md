@@ -358,11 +358,14 @@ Full codebase security audit covering all 17 Solidity contracts (~6,400 LOC), fr
 - **L-19 FIXED**: Distinct `RequestExpired` event in ChainlinkAdapter
 - **L-20 FIXED**: Proportional revenue tracking per license in IPToken.payRoyalty
 
-**Remaining (acknowledged/design decisions):**
-- M-6: Oracle reputation system redesign (acknowledged as design limitation)
-- M-9/10: Front-running mitigations (acknowledged)
-- L-11: `block.timestamp` nondeterminism as ZK public input (acknowledged)
-- L-23/L-24: PoliticalFilter ASCII-only restriction and gas cost (acknowledged)
+**Final fixes (third pass):**
+- **M-6 FIXED**: Oracle reputation redesign — balanced +2/-3 penalties, MIN_REPUTATION_FLOOR=10, admin `resetOracleReputation()`, `disputeAggregation()` with 7-day window
+- **M-9 FIXED**: Deadman switch front-running — commit-reveal mechanism (2-block delay)
+- **L-11 FIXED**: ZK proof timestamp — caller-supplied `_proofTimestamp` with MAX_PROOF_TIMESTAMP_DRIFT=1h validation
+- **L-23 FIXED**: PoliticalFilter targeted homoglyph detection — allows accented Latin, CJK, emoji; blocks only Cyrillic/Greek lookalikes
+- **L-24 FIXED**: PoliticalFilter gas optimization — bigram fast-path skips full scan for non-political strings
+
+**All findings addressed.** No remaining items.
 
 ### 2026-02-08 - Refocus Plan Phases 0-4
 
