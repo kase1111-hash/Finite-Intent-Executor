@@ -74,7 +74,7 @@ contract SunsetProtocol is AccessControl {
 
     mapping(address => SunsetState) public sunsetStates;
     mapping(address => AssetArchive[]) public archivedAssets;
-    mapping(address => mapping(address => bool)) public assetTransitioned;
+    // [Audit fix: L-21] Removed unused assetTransitioned mapping
 
     event SunsetInitiated(address indexed creator, uint256 sunsetTimestamp);
     event ExecutionHalted(address indexed creator, uint256 timestamp);

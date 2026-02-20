@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol"; // [Audit fix: M-2]
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./IOracle.sol";
 
@@ -18,7 +18,7 @@ import "./IOracle.sol";
  * In production, this connects to actual Chainlink nodes. For testing,
  * it can be operated in "direct" mode where authorized operators fulfill requests.
  */
-contract ChainlinkAdapter is IOracle, Ownable, ReentrancyGuard {
+contract ChainlinkAdapter is IOracle, Ownable2Step, ReentrancyGuard {
 
     // =============================================================================
     // STATE VARIABLES

@@ -80,6 +80,45 @@ jobs:
       - name: Run Foundry tests
         run: forge test --profile ci -vvv
 
+  # [Audit fix: I-4, I-16, I-19] Security scanning job
+  security:
+    name: Security Checks
+    runs-on: ubuntu-latest
+    needs: compile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      - run: npm ci
+
+      # [Audit fix: I-16] Dependency vulnerability scanning
+      - name: npm audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      # [Audit fix: I-4] Secrets scanning
+      - name: Check for committed secrets
+        run: |
+          # Check that .env file is not committed
+          if [ -f .env ]; then
+            echo "ERROR: .env file found in repository!"
+            exit 1
+          fi
+          # Check for common secret patterns in tracked files
+          if git grep -l 'PRIVATE_KEY=0x[0-9a-fA-F]\{64\}' -- ':!.env.example' ':!*.md'; then
+            echo "ERROR: Potential private key found in tracked files!"
+            exit 1
+          fi
+
+      # [Audit fix: I-19] Static analysis with Slither
+      - name: Install Slither
+        run: pip3 install slither-analyzer
+      - name: Run Slither
+        run: slither . --filter-paths "node_modules" --exclude-informational --exclude-low
+        continue-on-error: true
+
   lint-frontend:
     name: Lint Frontend
     runs-on: ubuntu-latest

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol"; // [Audit fix: M-2]
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./IOracle.sol";
 import "./IZKVerifier.sol";
@@ -28,7 +28,7 @@ import "../verifiers/PlonkVerifier.sol";
  * The certificate data (name, dates, etc.) never appears on-chain.
  * Only the proof and public inputs (hashes, commitments) are stored.
  */
-contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
+contract ZKVerifierAdapter is IOracle, Ownable2Step, ReentrancyGuard {
 
     // =============================================================================
     // STATE VARIABLES
@@ -41,8 +41,9 @@ contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
     bool private _isActive;
 
     /// @dev Whether placeholder verification is allowed (MUST be false in production)
-    /// @notice This flag allows non-cryptographic verification for testing only
-    bool public allowPlaceholderVerification;
+    /// @notice This flag is immutable — set at deployment and cannot be changed.
+    ///         Deploy with `false` for production. Only use `true` in test environments.
+    bool public immutable allowPlaceholderVerification;
 
     /// @dev Trusted issuer registry
     TrustedIssuerRegistry public issuerRegistry;
@@ -126,7 +127,6 @@ contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
     event Groth16VerifierSet(address indexed oldVerifier, address indexed newVerifier);
     event PlonkVerifierSet(address indexed oldVerifier, address indexed newVerifier);
     event OracleActiveStatusChanged(bool isActive);
-    event PlaceholderVerificationStatusChanged(bool allowed);
 
     // =============================================================================
     // CONSTRUCTOR
@@ -135,10 +135,12 @@ contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
     /**
      * @dev Constructor for ZKVerifierAdapter
      * @param _issuerRegistry Address of TrustedIssuerRegistry
+     * @param _allowPlaceholder Whether to allow placeholder verification (false for production)
      */
-    constructor(address _issuerRegistry) Ownable(msg.sender) {
+    constructor(address _issuerRegistry, bool _allowPlaceholder) Ownable(msg.sender) {
         require(_issuerRegistry != address(0), "Invalid registry address");
         issuerRegistry = TrustedIssuerRegistry(_issuerRegistry);
+        allowPlaceholderVerification = _allowPlaceholder;
         _isActive = true;
     }
 
@@ -197,18 +199,8 @@ contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
         emit OracleActiveStatusChanged(_active);
     }
 
-    /**
-     * @dev Enable or disable placeholder verification (FOR TESTING ONLY)
-     * @param _allow Whether to allow placeholder verification
-     * @notice WARNING: This MUST be set to false in production!
-     *         Placeholder verification does NOT cryptographically verify proofs.
-     *         It only performs basic sanity checks and should NEVER be used
-     *         for actual death certificate or medical verification.
-     */
-    function setAllowPlaceholderVerification(bool _allow) external onlyOwner {
-        allowPlaceholderVerification = _allow;
-        emit PlaceholderVerificationStatusChanged(_allow);
-    }
+    // setAllowPlaceholderVerification removed — flag is now immutable (set at deployment)
+    // See constructor parameter _allowPlaceholder. [Audit fix: H-1, M-4]
 
     /**
      * @dev Register a verification key for a ZK circuit
@@ -228,6 +220,10 @@ contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
         require(_keyId != bytes32(0), "Invalid key ID");
         require(verificationKeys[_keyId].keyId == bytes32(0), "Key already registered");
         require(_vkData.length > 0, "Empty verification key");
+        // [Audit fix: C-1] PLONK verifier is a non-functional placeholder — block registration
+        require(_proofSystem != IZKVerifier.ProofSystem.PLONK, "PLONK verification not yet implemented");
+        // [Audit fix: H-1 supp] STARK verification is not implemented — block registration
+        require(_proofSystem != IZKVerifier.ProofSystem.STARK, "STARK verification not yet implemented");
 
         verificationKeys[_keyId] = VerificationKeyData({
             keyId: _keyId,
@@ -479,9 +475,8 @@ contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
         } else if (vk.proofSystem == IZKVerifier.ProofSystem.PLONK) {
             return _verifyPlonk(_keyId, _proof, publicInputs);
         } else if (vk.proofSystem == IZKVerifier.ProofSystem.STARK) {
-            // STARK verification not yet implemented
-            // Fall back to placeholder verification
-            return _verifyPlaceholder(_keyId, _proof, publicInputs);
+            // [Audit fix: H-1 supp] STARK verification not implemented — revert instead of fallback
+            revert("STARK verification not implemented");
         }
 
         return false;
@@ -495,10 +490,8 @@ contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
         bytes memory _proof,
         uint256[] memory _publicInputs
     ) internal view returns (bool) {
-        // If verifier not set, use placeholder
-        if (address(groth16Verifier) == address(0)) {
-            return _verifyPlaceholder(_keyId, _proof, _publicInputs);
-        }
+        // [Audit fix: H-1] Require Groth16 verifier to be set — no silent fallback to placeholder
+        require(address(groth16Verifier) != address(0), "Groth16 verifier not deployed");
 
         // Check if key is registered in the verifier
         if (!groth16Verifier.isKeyActive(_keyId)) {
@@ -515,28 +508,18 @@ contract ZKVerifierAdapter is IOracle, Ownable, ReentrancyGuard {
 
     /**
      * @dev Verify a PLONK proof using the PlonkVerifier contract
+     * @custom:audit-fix C-1 — PlonkVerifier is a non-functional placeholder.
+     *         This function now reverts unconditionally until a real PLONK verifier is deployed.
      */
     function _verifyPlonk(
         bytes32 _keyId,
         bytes memory _proof,
         uint256[] memory _publicInputs
-    ) internal view returns (bool) {
-        // If verifier not set, use placeholder
-        if (address(plonkVerifier) == address(0)) {
-            return _verifyPlaceholder(_keyId, _proof, _publicInputs);
-        }
-
-        // Check if key is registered in the verifier
-        if (!plonkVerifier.isKeyActive(_keyId)) {
-            return false;
-        }
-
-        // Verify proof
-        try plonkVerifier.verifyProofBytes(_keyId, _proof, _publicInputs) returns (bool result) {
-            return result;
-        } catch {
-            return false;
-        }
+    ) internal pure returns (bool) {
+        // [Audit fix: C-1] PlonkVerifier's core functions (_computeLinearization,
+        // _computeBatchedCommitment, _computeBatchedEvaluation, _pairingCheck) return
+        // trivial values — any structurally valid proof passes. Disabled until completed.
+        revert("PLONK verification disabled — verifier is placeholder");
     }
 
     /**

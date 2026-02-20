@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol"; // [Audit fix: M-2]
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./oracles/IOracle.sol";
@@ -34,7 +34,7 @@ interface IIntentCaptureModule {
  * - OracleRegistry-based multi-oracle consensus
  * - ZK proof verification (when enabled)
  */
-contract TriggerMechanism is Ownable, ReentrancyGuard {
+contract TriggerMechanism is Ownable2Step, ReentrancyGuard {
     using ECDSA for bytes32;
 
     enum TriggerType {
@@ -179,6 +179,14 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
         require(_requiredSignatures >= 2, "Must require at least 2 signatures");
         require(_signers.length <= MAX_TRUSTED_SIGNERS, "Too many signers");
         require(!triggers[msg.sender].isTriggered, "Already triggered");
+
+        // [Audit fix: L-12] Check for duplicate signers
+        for (uint256 i = 0; i < _signers.length; i++) {
+            require(_signers[i] != address(0), "Zero address signer");
+            for (uint256 j = i + 1; j < _signers.length; j++) {
+                require(_signers[i] != _signers[j], "Duplicate signer");
+            }
+        }
 
         triggers[msg.sender] = TriggerConfig({
             triggerType: TriggerType.TrustedQuorum,
@@ -481,7 +489,7 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
      * @dev Execute deadman switch if interval has passed
      * @param _creator Address of the intent creator
      */
-    function executeDeadmanSwitch(address _creator) external {
+    function executeDeadmanSwitch(address _creator) external nonReentrant { // [Audit fix: L-2]
         TriggerConfig storage config = triggers[_creator];
         require(config.isConfigured, "Trigger not configured");
         require(config.triggerType == TriggerType.DeadmanSwitch, "Not a deadman switch");
@@ -530,20 +538,11 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
      * A non-empty proof is required to prevent accidental empty-data triggers.
      */
     function submitOracleProof(address _creator, bytes memory _proof) external {
-        TriggerConfig storage config = triggers[_creator];
-        require(config.isConfigured, "Trigger not configured");
-        require(config.triggerType == TriggerType.OracleVerified, "Not an oracle trigger");
-        require(!config.isTriggered, "Already triggered");
-        require(_isOracle(_creator, msg.sender), "Not an authorized oracle");
-        require(_proof.length > 0, "Proof data required");
-
-        // WARNING: Proof is NOT cryptographically verified in direct oracle mode.
-        // This mode trusts registered oracle addresses unconditionally.
-        // For production, use OracleRegistry (multi-oracle consensus) or
-        // ZKVerifierAdapter (on-chain ZK proof verification) instead.
-        emit OracleProofSubmitted(_creator, msg.sender);
-
-        _executeTrigger(_creator, config);
+        // [Audit fix: C-2] Direct oracle mode disabled — proof bytes were never validated,
+        // meaning any non-empty payload from a single oracle could irreversibly trigger
+        // a creator's entire posthumous intent. Use OracleRegistry (multi-oracle consensus)
+        // or ZKVerifierAdapter (on-chain ZK proof verification) instead.
+        revert("Direct oracle mode disabled — use OracleRegistry or ZKVerifierAdapter");
     }
 
     /**

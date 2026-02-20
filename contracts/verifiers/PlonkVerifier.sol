@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol"; // [Audit fix: M-2]
 
 /**
  * @title PlonkVerifier
@@ -15,7 +15,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  *
  * This verifier supports multiple verification keys for different circuits.
  */
-contract PlonkVerifier is Ownable {
+contract PlonkVerifier is Ownable2Step {
     // =============================================================================
     // ERRORS
     // =============================================================================

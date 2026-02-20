@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol"; // [Audit fix: M-2]
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -59,7 +59,7 @@ interface IOptimisticOracleV3 {
  * This provides economic security - disputing requires a bond, and the
  * loser forfeits their bond to the winner.
  */
-contract UMAAdapter is IOracle, Ownable, ReentrancyGuard {
+contract UMAAdapter is IOracle, Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // =============================================================================

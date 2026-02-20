@@ -35,6 +35,9 @@ interface ILexiconHolder {
 contract ExecutionAgent is AccessControl, ReentrancyGuard {
     bytes32 public constant EXECUTOR_ROLE = keccak256("EXECUTOR_ROLE");
     bytes32 public constant ORACLE_ROLE = keccak256("ORACLE_ROLE");
+    /// @notice Role for sunset activation — should only be granted to SunsetProtocol contract
+    /// @custom:audit-fix H-2 — activateSunset() was previously permissionless
+    bytes32 public constant SUNSET_ROLE = keccak256("SUNSET_ROLE");
 
     /// @notice Confidence threshold for action execution (immutable: 95%)
     /// @custom:invariant This value MUST always equal 95
@@ -117,6 +120,8 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
     );
     event SunsetActivated(address indexed creator, uint256 timestamp);
     event EmergencyFundsRecovered(address indexed creator, address indexed recipient, uint256 amount);
+    /// @custom:audit-fix M-16 — depositToTreasury previously emitted no event
+    event TreasuryDeposit(address indexed creator, uint256 amount);
 
     constructor(address _lexiconHolderAddress) {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -262,6 +267,7 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
         bytes32 _corpusHash
     ) external onlyRole(EXECUTOR_ROLE) nonReentrant {
         require(isExecutionActive(_creator), "Execution not active or sunset");
+        require(_recipient != address(0), "Zero address recipient"); // [Audit fix: M-13]
         require(treasuries[_creator] >= _amount, "Insufficient treasury funds");
         require(fundedProjects[_creator].length < MAX_PROJECTS_PER_CREATOR, "Project limit reached");
 
@@ -298,9 +304,12 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
 
     /**
      * @dev Deposits funds into creator's treasury
+     * @custom:audit-fix L-1 added nonReentrant, L-13 added zero-value check, M-16 added event
      */
-    function depositToTreasury(address _creator) external payable {
+    function depositToTreasury(address _creator) external payable nonReentrant {
+        require(msg.value > 0, "Zero deposit"); // [Audit fix: L-13]
         treasuries[_creator] += msg.value;
+        emit TreasuryDeposit(_creator, msg.value); // [Audit fix: M-16]
     }
 
     /**
@@ -319,6 +328,7 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
         bytes32 _corpusHash
     ) external onlyRole(EXECUTOR_ROLE) nonReentrant {
         require(isExecutionActive(_creator), "Execution not active or sunset");
+        require(_recipient != address(0), "Zero address recipient"); // [Audit fix: M-13]
         require(treasuries[_creator] >= _amount, "Insufficient treasury funds");
 
         // Verify distribution alignment with intent
@@ -345,8 +355,10 @@ contract ExecutionAgent is AccessControl, ReentrancyGuard {
     /**
      * @dev Activates sunset protocol after 20 years
      * @param _creator Intent creator
+     * @custom:audit-fix H-2 — now restricted to SUNSET_ROLE (SunsetProtocol contract)
+     *         Previously permissionless, bypassing SunsetProtocol's multi-step workflow.
      */
-    function activateSunset(address _creator) external {
+    function activateSunset(address _creator) external onlyRole(SUNSET_ROLE) {
         require(triggerTimestamps[_creator] > 0, "Execution not started");
         require(
             block.timestamp >= triggerTimestamps[_creator] + SUNSET_DURATION,

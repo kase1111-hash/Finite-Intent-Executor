@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol"; // [Audit fix: M-2]
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./IOracle.sol";
 
@@ -16,7 +16,7 @@ import "./IOracle.sol";
  * 3. Reputation tracking for oracle reliability
  * 4. Fallback mechanisms when oracles are unavailable
  */
-contract OracleRegistry is Ownable, ReentrancyGuard {
+contract OracleRegistry is Ownable2Step, ReentrancyGuard {
 
     // =============================================================================
     // STRUCTS
@@ -55,7 +55,8 @@ contract OracleRegistry is Ownable, ReentrancyGuard {
     uint256 public minReputationThreshold = 50;
 
     /// @dev Default number of oracles required for consensus
-    uint256 public defaultConsensusThreshold = 1;
+    /// @custom:audit-fix M-5 — increased from 1 to 2 to prevent single-oracle attacks
+    uint256 public defaultConsensusThreshold = 2;
 
     /// @dev Maximum number of oracles that can be registered
     uint256 public constant MAX_ORACLES = 20;
@@ -233,12 +234,17 @@ contract OracleRegistry is Ownable, ReentrancyGuard {
         });
 
         // Request verification from all active oracles
+        // [Audit fix: M-8] Wrapped in try/catch — a single reverting oracle no longer DoS-es aggregation
         for (uint256 i = 0; i < oracleList.length; i++) {
             address oracleAddr = oracleList[i];
             OracleInfo memory info = oracles[oracleAddr];
 
             if (info.isActive && info.reputationScore >= minReputationThreshold) {
-                IOracle(oracleAddr).requestVerification(_creator, _eventType, _dataHash);
+                try IOracle(oracleAddr).requestVerification(_creator, _eventType, _dataHash) {
+                    // success
+                } catch {
+                    // Oracle failed — skip and continue with remaining oracles
+                }
             }
         }
 

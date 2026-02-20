@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol"; // [Audit fix: M-2]
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
@@ -18,7 +18,7 @@ import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
  * The ZK proof verifies that a certificate was signed by a trusted issuer
  * without revealing the certificate contents on-chain.
  */
-contract TrustedIssuerRegistry is Ownable {
+contract TrustedIssuerRegistry is Ownable2Step {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
 

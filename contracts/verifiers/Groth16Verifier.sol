@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol"; // [Audit fix: M-2]
 
 /**
  * @title Groth16Verifier
@@ -21,7 +21,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  *   - IC is the input commitment vector
  *   - pub_i are the public inputs
  */
-contract Groth16Verifier is Ownable {
+contract Groth16Verifier is Ownable2Step {
     // =============================================================================
     // ERRORS
     // =============================================================================
