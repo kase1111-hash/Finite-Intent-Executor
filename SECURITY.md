@@ -312,20 +312,39 @@ Before mainnet deployment, engage external auditors to:
 
 ## Changelog
 
-### 2026-02-20 - Comprehensive Security Audit
+### 2026-02-20 - Comprehensive Security Audit + Remediation
 
-Full codebase security audit covering all 17 Solidity contracts (~6,400 LOC), frontend, scripts, CI/CD, and dependencies. See [SECURITY_AUDIT_REPORT.md](./SECURITY_AUDIT_REPORT.md) for the complete report.
+Full codebase security audit covering all 17 Solidity contracts (~6,400 LOC), frontend, scripts, CI/CD, and dependencies. See [SECURITY_AUDIT_REPORT.md](./SECURITY_AUDIT_REPORT.md) for the complete report. See [REMEDIATION_PLAN.md](./REMEDIATION_PLAN.md) for the full plan.
 
-**New findings not in previous audits:**
-- **CRITICAL**: PlonkVerifier is a non-functional placeholder accepting any structurally valid proof (C-1)
-- **CRITICAL**: Direct oracle mode accepts any non-empty bytes as proof for irreversible execution (C-2)
-- **CRITICAL**: Single deployer key controls all 13 contracts' admin roles (C-3)
-- **HIGH**: ZKVerifierAdapter falls back to non-cryptographic placeholder on 3 code paths (H-1)
-- **HIGH**: `activateSunset()` has no access control, bypasses SunsetProtocol workflow (H-2)
-- **HIGH**: INDEXER_ROLE is single trust root for all execution authorization (H-4)
-- 22 Medium findings (access control, oracle manipulation, DoS, input validation, PoliticalFilter bypass, dead code)
-- 23 Low findings (reentrancy, precision, events, validation, logic)
-- 19 Infrastructure findings (credentials, frontend, scripts, CI/CD)
+**Remediation implemented (same day):**
+- **C-1 FIXED**: PLONK path disabled in ZKVerifierAdapter — key registration blocked, verification reverts
+- **C-2 FIXED**: `submitOracleProof` now reverts unconditionally
+- **C-3 MITIGATED**: Deploy script requires `MULTISIG_ADDRESS` for mainnet; role transfer function added
+- **H-1 FIXED**: `allowPlaceholderVerification` now immutable (constructor param); Groth16 verifier required; STARK reverts
+- **H-2 FIXED**: `activateSunset()` now requires `SUNSET_ROLE` (granted to SunsetProtocol)
+- **H-4 MITIGATED**: Resolution cache now enforces 7-day staleness check
+- **M-2 FIXED**: 9 Ownable contracts migrated to Ownable2Step
+- **M-5 FIXED**: Oracle consensus threshold increased from 1 to 2
+- **M-8 FIXED**: Oracle calls wrapped in try/catch
+- **M-13/14/15 FIXED**: Zero-address checks on fund/license/royalty functions
+- **M-16/17 FIXED**: TreasuryDeposit and RoyaltyInfoUpdated events added
+- **M-18 FIXED**: Public-domain tokens now non-transferable via _update() override
+- **L-1/2 FIXED**: nonReentrant added to depositToTreasury and executeDeadmanSwitch
+- **L-12 FIXED**: Duplicate signer check in configureTrustedQuorum
+- **L-17 FIXED**: VersionSigned event added
+- **L-21 FIXED**: Unused assetTransitioned mapping removed
+- **I-1 FIXED**: .env.example placeholder key cleared
+- **I-4/16/19 FIXED**: Security CI job added (npm audit, secrets scan, Slither)
+- **I-5 FIXED**: CSP header added to frontend
+- **I-17 FIXED**: Dependabot configuration added
+
+**Remaining (not yet implemented):**
+- M-6: Oracle reputation system redesign (acknowledged as design limitation)
+- M-9/10: Front-running mitigations (acknowledged)
+- M-11/12: Unbounded arrays in oracle adapters and verifiers
+- M-19/20/21: PoliticalFilter leet-speak normalization and party term promotion
+- M-22: ErrorHandler library removal
+- L-3 through L-24 (remaining low findings)
 
 ### 2026-02-08 - Refocus Plan Phases 0-4
 
@@ -415,4 +434,4 @@ Full codebase security audit covering all 17 Solidity contracts (~6,400 LOC), fr
 
 *This security documentation should be updated as vulnerabilities are discovered and fixed.*
 
-*Last Updated: 2026-02-08*
+*Last Updated: 2026-02-20*
