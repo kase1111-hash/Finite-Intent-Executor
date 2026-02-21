@@ -11,9 +11,10 @@ export const CONTRACT_ADDRESSES = {
 };
 
 // Network configuration
+// [Audit fix: I-6] RPC URL must come from environment — no hardcoded fallback
 export const NETWORK_CONFIG = {
   chainId: parseInt(import.meta.env.VITE_CHAIN_ID || '31337'),
-  rpcUrl: import.meta.env.VITE_RPC_URL || 'http://127.0.0.1:8545',
+  rpcUrl: import.meta.env.VITE_RPC_URL || '',
   networkName: import.meta.env.VITE_NETWORK_NAME || 'hardhat',
 };
 
@@ -136,15 +137,16 @@ export const CONTRACT_ABIS = {
 }
 
 // Network configurations
+// [Audit fix: I-6] RPC URLs removed — connections use VITE_RPC_URL env var or wallet-injected provider
 export const NETWORKS = {
-  1: { name: 'Ethereum Mainnet', symbol: 'ETH', explorer: 'https://etherscan.io', rpc: 'https://eth-mainnet.g.alchemy.com/v2/' },
-  5: { name: 'Goerli Testnet', symbol: 'ETH', explorer: 'https://goerli.etherscan.io', rpc: 'https://eth-goerli.g.alchemy.com/v2/', deprecated: true },
-  11155111: { name: 'Sepolia Testnet', symbol: 'ETH', explorer: 'https://sepolia.etherscan.io', rpc: 'https://eth-sepolia.g.alchemy.com/v2/' },
-  8453: { name: 'Base', symbol: 'ETH', explorer: 'https://basescan.org', rpc: 'https://mainnet.base.org' },
-  84532: { name: 'Base Sepolia', symbol: 'ETH', explorer: 'https://sepolia.basescan.org', rpc: 'https://sepolia.base.org' },
-  137: { name: 'Polygon', symbol: 'MATIC', explorer: 'https://polygonscan.com', rpc: 'https://polygon-mainnet.g.alchemy.com/v2/' },
-  80001: { name: 'Mumbai Testnet', symbol: 'MATIC', explorer: 'https://mumbai.polygonscan.com', rpc: 'https://polygon-mumbai.g.alchemy.com/v2/', deprecated: true },
-  31337: { name: 'Hardhat Local', symbol: 'ETH', explorer: '', rpc: 'http://127.0.0.1:8545' },
+  1: { name: 'Ethereum Mainnet', symbol: 'ETH', explorer: 'https://etherscan.io' },
+  5: { name: 'Goerli Testnet', symbol: 'ETH', explorer: 'https://goerli.etherscan.io', deprecated: true },
+  11155111: { name: 'Sepolia Testnet', symbol: 'ETH', explorer: 'https://sepolia.etherscan.io' },
+  8453: { name: 'Base', symbol: 'ETH', explorer: 'https://basescan.org' },
+  84532: { name: 'Base Sepolia', symbol: 'ETH', explorer: 'https://sepolia.basescan.org' },
+  137: { name: 'Polygon', symbol: 'MATIC', explorer: 'https://polygonscan.com' },
+  80001: { name: 'Mumbai Testnet', symbol: 'MATIC', explorer: 'https://mumbai.polygonscan.com', deprecated: true },
+  31337: { name: 'Hardhat Local', symbol: 'ETH', explorer: '' },
 };
 
 // Recommended networks for deployment (in order of preference)

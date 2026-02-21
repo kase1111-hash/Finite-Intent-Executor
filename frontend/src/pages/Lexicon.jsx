@@ -93,7 +93,7 @@ function Lexicon() {
       fetchCorpusData()
     } catch (err) {
       console.error('Failed to freeze corpus:', err)
-      toast.error(err.reason || 'Failed to freeze corpus')
+      toast.error('Failed to freeze corpus. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -135,7 +135,7 @@ function Lexicon() {
       })
     } catch (err) {
       console.error('Failed to create index:', err)
-      toast.error(err.reason || 'Failed to create semantic index')
+      toast.error('Failed to create semantic index. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -156,7 +156,7 @@ function Lexicon() {
       })
     } catch (err) {
       console.error('Search failed:', err)
-      toast.error(err.reason || 'Search failed')
+      toast.error('Search failed. Please try again.')
       setSearchResults(null)
     } finally {
       setSubmitting(false)

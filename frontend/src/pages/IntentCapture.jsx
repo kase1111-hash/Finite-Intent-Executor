@@ -19,6 +19,23 @@ import {
 import { format } from 'date-fns'
 import DocumentUploadArea from '../components/DocumentUploadArea'
 
+// [Audit fix: I-7] Input length limits matching contract-side constants
+const INPUT_LIMITS = {
+  intentDocument: 10000,
+  corpusContent: 50000,
+  corpusUri: 2000,
+  assetsUri: 2000,
+  goalDescription: 1000,
+  goalConstraints: 2000,
+  maxAssets: 100,
+}
+
+// [Audit fix: I-7] Strip control characters (keep newlines/tabs for text areas)
+function sanitizeInput(value) {
+  // eslint-disable-next-line no-control-regex
+  return value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+}
+
 function IntentCapture() {
   const { account, contracts, isConnected } = useWeb3()
   const [loading, setLoading] = useState(false)
@@ -70,6 +87,14 @@ function IntentCapture() {
   }, [fetchExistingIntent])
 
   const handleFormChange = (field, value) => {
+    // [Audit fix: I-7] Sanitize and enforce length limits on string inputs
+    if (typeof value === 'string') {
+      value = sanitizeInput(value)
+      const limit = INPUT_LIMITS[field]
+      if (limit && value.length > limit) {
+        value = value.slice(0, limit)
+      }
+    }
     setForm(prev => ({ ...prev, [field]: value }))
   }
 
@@ -112,6 +137,16 @@ function IntentCapture() {
       return false
     }
 
+    // [Audit fix: I-7] Length validation
+    if (form.intentDocument.length > INPUT_LIMITS.intentDocument) {
+      toast.error(`Intent document exceeds ${INPUT_LIMITS.intentDocument} character limit`)
+      return false
+    }
+    if (form.corpusContent.length > INPUT_LIMITS.corpusContent) {
+      toast.error(`Corpus content exceeds ${INPUT_LIMITS.corpusContent} character limit`)
+      return false
+    }
+
     const yearDiff = form.corpusEndYear - form.corpusStartYear
     if (yearDiff < 5 || yearDiff > 10) {
       toast.error('Corpus window must be 5-10 years')
@@ -121,6 +156,12 @@ function IntentCapture() {
     const validAddresses = form.assetAddresses.filter(addr => addr.trim())
     if (validAddresses.length === 0) {
       toast.error('At least one asset address is required')
+      return false
+    }
+
+    // [Audit fix: I-7] Asset count validation
+    if (validAddresses.length > INPUT_LIMITS.maxAssets) {
+      toast.error(`Maximum ${INPUT_LIMITS.maxAssets} asset addresses allowed`)
       return false
     }
 
@@ -161,7 +202,7 @@ function IntentCapture() {
       fetchExistingIntent()
     } catch (err) {
       console.error('Failed to capture intent:', err)
-      toast.error(err.reason || 'Failed to capture intent')
+      toast.error('Failed to capture intent. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -194,7 +235,7 @@ function IntentCapture() {
       fetchExistingIntent()
     } catch (err) {
       console.error('Failed to add goal:', err)
-      toast.error(err.reason || 'Failed to add goal')
+      toast.error('Failed to add goal. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -215,7 +256,7 @@ function IntentCapture() {
       setGoals([])
     } catch (err) {
       console.error('Failed to revoke intent:', err)
-      toast.error(err.reason || 'Failed to revoke intent')
+      toast.error('Failed to revoke intent. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -354,18 +395,20 @@ function IntentCapture() {
                   <input
                     type="text"
                     value={newGoal.description}
-                    onChange={(e) => setNewGoal(prev => ({ ...prev, description: e.target.value }))}
+                    onChange={(e) => setNewGoal(prev => ({ ...prev, description: sanitizeInput(e.target.value) }))}
                     placeholder="e.g., Fund open-source AI safety research"
                     className="input"
+                    maxLength={INPUT_LIMITS.goalDescription}
                   />
                 </div>
                 <div>
                   <label className="label">Constraints (optional)</label>
                   <textarea
                     value={newGoal.constraints}
-                    onChange={(e) => setNewGoal(prev => ({ ...prev, constraints: e.target.value }))}
+                    onChange={(e) => setNewGoal(prev => ({ ...prev, constraints: sanitizeInput(e.target.value) }))}
                     placeholder="e.g., No commercial use without attribution"
                     className="input min-h-[80px]"
+                    maxLength={INPUT_LIMITS.goalConstraints}
                   />
                 </div>
                 <div>
@@ -461,6 +504,7 @@ function IntentCapture() {
                 onChange={(e) => handleFormChange('intentDocument', e.target.value)}
                 placeholder="Describe your complete intent, including values, goals, and how you want your assets managed..."
                 className="input min-h-[150px]"
+                maxLength={INPUT_LIMITS.intentDocument}
                 required
               />
               <p className="text-xs text-gray-500 mt-1">
@@ -482,6 +526,7 @@ function IntentCapture() {
                 onChange={(e) => handleFormChange('corpusContent', e.target.value)}
                 placeholder="Your contextual corpus for intent interpretation (writings, notes, recordings transcripts, etc.)..."
                 className="input min-h-[150px]"
+                maxLength={INPUT_LIMITS.corpusContent}
                 required
               />
             </div>
@@ -493,6 +538,7 @@ function IntentCapture() {
                 onChange={(e) => handleFormChange('corpusUri', e.target.value)}
                 placeholder="ipfs://..."
                 className="input"
+                maxLength={INPUT_LIMITS.corpusUri}
                 required
               />
             </div>
@@ -504,6 +550,7 @@ function IntentCapture() {
                 onChange={(e) => handleFormChange('assetsUri', e.target.value)}
                 placeholder="ipfs://..."
                 className="input"
+                maxLength={INPUT_LIMITS.assetsUri}
               />
             </div>
             <div className="grid grid-cols-2 gap-4">

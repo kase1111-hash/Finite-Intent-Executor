@@ -82,7 +82,7 @@ function ExecutionMonitor() {
       fetchExecutionData()
     } catch (err) {
       console.error('Failed to activate:', err)
-      toast.error(err.reason || 'Failed to activate execution')
+      toast.error('Failed to activate execution. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -111,7 +111,7 @@ function ExecutionMonitor() {
       fetchExecutionData()
     } catch (err) {
       console.error('Failed to execute action:', err)
-      toast.error(err.reason || 'Failed to execute action')
+      toast.error('Failed to execute action. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -142,7 +142,7 @@ function ExecutionMonitor() {
       fetchExecutionData()
     } catch (err) {
       console.error('Failed to fund project:', err)
-      toast.error(err.reason || 'Failed to fund project')
+      toast.error('Failed to fund project. Please try again.')
     } finally {
       setSubmitting(false)
     }
