@@ -76,6 +76,8 @@ contract IPToken is ERC721, ERC721URIStorage, AccessControl, ReentrancyGuard {
     );
     event TransitionedToPublicDomain(uint256 indexed tokenId, uint256 timestamp);
     event RevenueCollected(uint256 indexed tokenId, uint256 amount);
+    /// @custom:audit-fix M-17 — setRoyaltyInfo previously emitted no event
+    event RoyaltyInfoUpdated(uint256 indexed tokenId, address indexed recipient, uint256 percentage);
 
     constructor() ERC721("Finite Intent IP Token", "FIIPT") {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -145,6 +147,7 @@ contract IPToken is ERC721, ERC721URIStorage, AccessControl, ReentrancyGuard {
         uint256 _duration
     ) external onlyRole(EXECUTOR_ROLE) {
         require(_ownerOf(_tokenId) != address(0), "Token does not exist");
+        require(_licensee != address(0), "Zero address licensee"); // [Audit fix: M-14]
         require(_royaltyPercentage <= 10000, "Royalty cannot exceed 100%");
         require(!ipAssets[_tokenId].isPublicDomain, "IP is in public domain");
         require(licenses[_tokenId].length < MAX_LICENSES_PER_TOKEN, "License limit reached");
@@ -178,17 +181,31 @@ contract IPToken is ERC721, ERC721URIStorage, AccessControl, ReentrancyGuard {
         address recipient = royaltyInfo.recipient;
 
         // Update revenue for active licenses FIRST (checks-effects-interactions)
+        // [Audit fix: L-20] — distribute proportionally instead of crediting full amount to each
         License[] storage tokenLicenses = licenses[_tokenId];
         uint256 iterLimit = tokenLicenses.length > MAX_LICENSES_PER_TOKEN
             ? MAX_LICENSES_PER_TOKEN
             : tokenLicenses.length;
+        uint256 activeLicenseCount = 0;
         for (uint i = 0; i < iterLimit; i++) {
             if (
                 tokenLicenses[i].isActive &&
                 block.timestamp >= tokenLicenses[i].startTime &&
                 block.timestamp <= tokenLicenses[i].endTime
             ) {
-                tokenLicenses[i].revenueGenerated += msg.value;
+                activeLicenseCount++;
+            }
+        }
+        if (activeLicenseCount > 0) {
+            uint256 perLicenseShare = msg.value / activeLicenseCount;
+            for (uint i = 0; i < iterLimit; i++) {
+                if (
+                    tokenLicenses[i].isActive &&
+                    block.timestamp >= tokenLicenses[i].startTime &&
+                    block.timestamp <= tokenLicenses[i].endTime
+                ) {
+                    tokenLicenses[i].revenueGenerated += perLicenseShare;
+                }
             }
         }
 
@@ -235,12 +252,14 @@ contract IPToken is ERC721, ERC721URIStorage, AccessControl, ReentrancyGuard {
         uint256 _percentage
     ) external onlyRole(EXECUTOR_ROLE) {
         require(_ownerOf(_tokenId) != address(0), "Token does not exist");
+        require(_recipient != address(0), "Zero address recipient"); // [Audit fix: M-15]
         require(_percentage <= 10000, "Percentage cannot exceed 100%");
 
         royalties[_tokenId] = RoyaltyInfo({
             recipient: _recipient,
             percentage: _percentage
         });
+        emit RoyaltyInfoUpdated(_tokenId, _recipient, _percentage); // [Audit fix: M-17]
     }
 
     /**
@@ -281,6 +300,23 @@ contract IPToken is ERC721, ERC721URIStorage, AccessControl, ReentrancyGuard {
         return license.isActive &&
                block.timestamp >= license.startTime &&
                block.timestamp <= license.endTime;
+    }
+
+    /**
+     * @dev Override _update to prevent transfers of public-domain tokens
+     * @custom:audit-fix M-18 — public-domain tokens should not be transferable
+     */
+    function _update(address to, uint256 tokenId, address auth)
+        internal
+        override(ERC721)
+        returns (address)
+    {
+        // Allow minting (from == address(0)) and burning, block transfers of public domain tokens
+        address from = _ownerOf(tokenId);
+        if (from != address(0) && to != address(0)) {
+            require(!ipAssets[tokenId].isPublicDomain, "Public domain tokens are non-transferable");
+        }
+        return super._update(to, tokenId, auth);
     }
 
     // Override required functions

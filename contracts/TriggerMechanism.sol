@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol"; // [Audit fix: M-2]
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./oracles/IOracle.sol";
@@ -34,7 +34,7 @@ interface IIntentCaptureModule {
  * - OracleRegistry-based multi-oracle consensus
  * - ZK proof verification (when enabled)
  */
-contract TriggerMechanism is Ownable, ReentrancyGuard {
+contract TriggerMechanism is Ownable2Step, ReentrancyGuard {
     using ECDSA for bytes32;
 
     enum TriggerType {
@@ -82,6 +82,11 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
     mapping(address => mapping(address => bool)) public hasSignedTrigger;
     mapping(address => uint256) public signatureCount;
 
+    /// @dev [Audit fix: M-9] Commit-reveal state for deadman switch front-running prevention
+    mapping(address => mapping(address => bytes32)) public deadmanCommits;
+    mapping(address => mapping(address => uint256)) public deadmanCommitBlocks;
+    uint256 public constant COMMIT_REVEAL_DELAY = 2; // blocks
+
     /// @dev Minimum confidence threshold for oracle verification (matches ExecutionAgent)
     uint256 public constant MIN_CONFIDENCE_THRESHOLD = 95;
 
@@ -117,6 +122,9 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
         address indexed creator,
         bool isValid
     );
+    /// @custom:audit-fix M-9 — commit-reveal events for deadman switch
+    event DeadmanCommitted(address indexed creator, address indexed committer, uint256 blockNumber);
+    event DeadmanExecuted(address indexed creator, address indexed executor);
 
     constructor(address _intentModuleAddress) Ownable(msg.sender) {
         intentModule = IIntentCaptureModule(_intentModuleAddress);
@@ -179,6 +187,14 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
         require(_requiredSignatures >= 2, "Must require at least 2 signatures");
         require(_signers.length <= MAX_TRUSTED_SIGNERS, "Too many signers");
         require(!triggers[msg.sender].isTriggered, "Already triggered");
+
+        // [Audit fix: L-12] Check for duplicate signers
+        for (uint256 i = 0; i < _signers.length; i++) {
+            require(_signers[i] != address(0), "Zero address signer");
+            for (uint256 j = i + 1; j < _signers.length; j++) {
+                require(_signers[i] != _signers[j], "Duplicate signer");
+            }
+        }
 
         triggers[msg.sender] = TriggerConfig({
             triggerType: TriggerType.TrustedQuorum,
@@ -478,10 +494,12 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Execute deadman switch if interval has passed
+     * @dev Commit intent to execute deadman switch (phase 1 of commit-reveal)
      * @param _creator Address of the intent creator
+     * @custom:audit-fix M-9 — prevents front-running of deadman switch execution.
+     *         Caller must commit first, wait COMMIT_REVEAL_DELAY blocks, then reveal.
      */
-    function executeDeadmanSwitch(address _creator) external {
+    function commitDeadmanExecution(address _creator) external {
         TriggerConfig storage config = triggers[_creator];
         require(config.isConfigured, "Trigger not configured");
         require(config.triggerType == TriggerType.DeadmanSwitch, "Not a deadman switch");
@@ -491,6 +509,42 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
             "Deadman interval not elapsed"
         );
 
+        bytes32 commitment = keccak256(abi.encodePacked(msg.sender, _creator, block.number));
+        deadmanCommits[_creator][msg.sender] = commitment;
+        deadmanCommitBlocks[_creator][msg.sender] = block.number;
+
+        emit DeadmanCommitted(_creator, msg.sender, block.number);
+    }
+
+    /**
+     * @dev Execute deadman switch if interval has passed (phase 2: reveal)
+     * @param _creator Address of the intent creator
+     * @custom:audit-fix M-9 — requires prior commitment to prevent front-running
+     */
+    function executeDeadmanSwitch(address _creator) external nonReentrant { // [Audit fix: L-2]
+        TriggerConfig storage config = triggers[_creator];
+        require(config.isConfigured, "Trigger not configured");
+        require(config.triggerType == TriggerType.DeadmanSwitch, "Not a deadman switch");
+        require(!config.isTriggered, "Already triggered");
+        require(
+            block.timestamp >= config.lastCheckIn + config.deadmanInterval,
+            "Deadman interval not elapsed"
+        );
+
+        // [Audit fix: M-9] Commit-reveal: caller must have committed >= COMMIT_REVEAL_DELAY blocks ago
+        uint256 commitBlock = deadmanCommitBlocks[_creator][msg.sender];
+        require(commitBlock > 0, "No commitment found — call commitDeadmanExecution first");
+        require(block.number >= commitBlock + COMMIT_REVEAL_DELAY, "Reveal too early — wait for commit delay");
+
+        // Verify commitment matches
+        bytes32 expected = keccak256(abi.encodePacked(msg.sender, _creator, commitBlock));
+        require(deadmanCommits[_creator][msg.sender] == expected, "Invalid commitment");
+
+        // Clear commitment
+        delete deadmanCommits[_creator][msg.sender];
+        delete deadmanCommitBlocks[_creator][msg.sender];
+
+        emit DeadmanExecuted(_creator, msg.sender);
         _executeTrigger(_creator, config);
     }
 
@@ -530,20 +584,11 @@ contract TriggerMechanism is Ownable, ReentrancyGuard {
      * A non-empty proof is required to prevent accidental empty-data triggers.
      */
     function submitOracleProof(address _creator, bytes memory _proof) external {
-        TriggerConfig storage config = triggers[_creator];
-        require(config.isConfigured, "Trigger not configured");
-        require(config.triggerType == TriggerType.OracleVerified, "Not an oracle trigger");
-        require(!config.isTriggered, "Already triggered");
-        require(_isOracle(_creator, msg.sender), "Not an authorized oracle");
-        require(_proof.length > 0, "Proof data required");
-
-        // WARNING: Proof is NOT cryptographically verified in direct oracle mode.
-        // This mode trusts registered oracle addresses unconditionally.
-        // For production, use OracleRegistry (multi-oracle consensus) or
-        // ZKVerifierAdapter (on-chain ZK proof verification) instead.
-        emit OracleProofSubmitted(_creator, msg.sender);
-
-        _executeTrigger(_creator, config);
+        // [Audit fix: C-2] Direct oracle mode disabled — proof bytes were never validated,
+        // meaning any non-empty payload from a single oracle could irreversibly trigger
+        // a creator's entire posthumous intent. Use OracleRegistry (multi-oracle consensus)
+        // or ZKVerifierAdapter (on-chain ZK proof verification) instead.
+        revert("Direct oracle mode disabled — use OracleRegistry or ZKVerifierAdapter");
     }
 
     /**

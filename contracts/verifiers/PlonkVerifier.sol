@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol"; // [Audit fix: M-2]
 
 /**
  * @title PlonkVerifier
@@ -15,7 +15,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  *
  * This verifier supports multiple verification keys for different circuits.
  */
-contract PlonkVerifier is Ownable {
+contract PlonkVerifier is Ownable2Step {
     // =============================================================================
     // ERRORS
     // =============================================================================
@@ -121,6 +121,9 @@ contract PlonkVerifier is Ownable {
     /// @notice BN254 curve order
     uint256 public constant PRIME_Q = 21888242871839275222246405745257275088696311157297823662689037894645226208583;
 
+    /// @notice Maximum verification keys to prevent unbounded array growth [Audit fix: M-12]
+    uint256 public constant MAX_VERIFICATION_KEYS = 100;
+
     /// @notice BN254 scalar field order
     uint256 public constant PRIME_R = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
 
@@ -178,6 +181,8 @@ contract PlonkVerifier is Ownable {
         if (_n == 0 || _numPublicInputs == 0) {
             revert InvalidVerificationKey();
         }
+        // [Audit fix: M-12]
+        require(keyIds.length < MAX_VERIFICATION_KEYS, "Verification key limit reached");
 
         VerificationKey storage vk = verificationKeys[_keyId];
         vk.n = _n;

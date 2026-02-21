@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol"; // [Audit fix: M-2]
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./IOracle.sol";
 
@@ -18,7 +18,7 @@ import "./IOracle.sol";
  * In production, this connects to actual Chainlink nodes. For testing,
  * it can be operated in "direct" mode where authorized operators fulfill requests.
  */
-contract ChainlinkAdapter is IOracle, Ownable, ReentrancyGuard {
+contract ChainlinkAdapter is IOracle, Ownable2Step, ReentrancyGuard {
 
     // =============================================================================
     // STATE VARIABLES
@@ -29,6 +29,9 @@ contract ChainlinkAdapter is IOracle, Ownable, ReentrancyGuard {
 
     /// @dev Default request expiration time (7 days)
     uint256 public constant DEFAULT_EXPIRATION = 7 days;
+
+    /// @dev Maximum requests per creator to prevent unbounded array growth [Audit fix: M-11]
+    uint256 public constant MAX_REQUESTS_PER_CREATOR = 1000;
 
     /// @dev Whether the oracle is currently accepting requests
     bool private _isActive;
@@ -64,6 +67,8 @@ contract ChainlinkAdapter is IOracle, Ownable, ReentrancyGuard {
     event OperatorAuthorized(address indexed operator, bool authorized);
     event OracleConfigUpdated(address oracle, bytes32 jobId, uint256 fee);
     event OracleActiveStatusChanged(bool isActive);
+    /// @custom:audit-fix L-19 — distinct event for expired requests (was reusing VerificationFulfilled)
+    event RequestExpired(bytes32 indexed requestId, address indexed creator);
 
     // =============================================================================
     // CONSTRUCTOR
@@ -88,8 +93,9 @@ contract ChainlinkAdapter is IOracle, Ownable, ReentrancyGuard {
         oracleFee = _fee;
         _isActive = true;
 
-        // Owner is automatically an authorized operator
-        authorizedOperators[msg.sender] = true;
+        // [Audit fix: M-3] Removed auto-authorization of deployer as operator.
+        // Owner should explicitly call setOperator() to grant operator role,
+        // enforcing principle of least privilege.
     }
 
     // =============================================================================
@@ -183,7 +189,8 @@ contract ChainlinkAdapter is IOracle, Ownable, ReentrancyGuard {
             confidenceScore: 0
         });
 
-        // Track request for creator
+        // Track request for creator [Audit fix: M-11]
+        require(creatorRequests[_creator].length < MAX_REQUESTS_PER_CREATOR, "Request limit reached");
         creatorRequests[_creator].push(requestId);
 
         emit VerificationRequested(requestId, _creator, _eventType, block.timestamp);
@@ -297,12 +304,7 @@ contract ChainlinkAdapter is IOracle, Ownable, ReentrancyGuard {
 
         request.status = VerificationStatus.Expired;
 
-        emit VerificationFulfilled(
-            _requestId,
-            request.creator,
-            VerificationStatus.Expired,
-            0
-        );
+        emit RequestExpired(_requestId, request.creator); // [Audit fix: L-19]
     }
 
     /**
@@ -313,6 +315,7 @@ contract ChainlinkAdapter is IOracle, Ownable, ReentrancyGuard {
     function disputeVerification(bytes32 _requestId, string calldata _reason) external {
         VerificationRequest storage request = requests[_requestId];
         require(request.requestTimestamp > 0, "Request does not exist");
+        require(request.creator == msg.sender, "Only creator can dispute"); // [Audit fix: L-3]
         require(
             request.status == VerificationStatus.Verified ||
             request.status == VerificationStatus.Rejected,

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol"; // [Audit fix: M-2]
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 /**
@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
  * @dev Captures assets, goals, constraints, and time-boxed contextual corpus
  * Outputs immutable intent graph with cryptographic commitments
  */
-contract IntentCaptureModule is Ownable {
+contract IntentCaptureModule is Ownable2Step {
     using ECDSA for bytes32;
 
     /// @notice Maximum number of goals per creator to prevent DoS
@@ -53,6 +53,8 @@ contract IntentCaptureModule is Ownable {
     event IntentRevoked(address indexed creator, uint256 revokeTimestamp);
     event IntentTriggered(address indexed creator, uint256 triggerTimestamp);
     event GoalAdded(address indexed creator, string description, uint256 priority);
+    /// @custom:audit-fix L-17 — signVersion previously emitted no event
+    event VersionSigned(address indexed creator, bytes32 versionHash);
     event TriggerMechanismSet(address indexed oldMechanism, address indexed newMechanism);
 
     modifier notTriggered() {
@@ -86,6 +88,7 @@ contract IntentCaptureModule is Ownable {
         uint256 _corpusEndYear,
         address[] memory _assetAddresses
     ) external notTriggered notRevoked {
+        require(intents[msg.sender].intentHash == bytes32(0), "Intent already captured"); // [Audit fix: L-15]
         require(_corpusEndYear > _corpusStartYear, "Invalid corpus window");
         require(_corpusEndYear - _corpusStartYear >= 5 && _corpusEndYear - _corpusStartYear <= 10,
                 "Corpus window must be 5-10 years");
@@ -139,6 +142,7 @@ contract IntentCaptureModule is Ownable {
     function signVersion(bytes32 _versionHash) external notTriggered notRevoked {
         require(intents[msg.sender].intentHash != bytes32(0), "Intent not captured");
         signedVersions[msg.sender][_versionHash] = true;
+        emit VersionSigned(msg.sender, _versionHash); // [Audit fix: L-17]
     }
 
     /**

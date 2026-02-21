@@ -30,6 +30,10 @@ contract LexiconHolder is AccessControl {
     /// @notice Maximum queries in a single batch resolution
     uint256 public constant MAX_RESOLUTION_BATCH = 20;
 
+    /// @notice Maximum age of a cached resolution before it is considered stale
+    /// @custom:audit-fix H-4 — prevents stale resolutions from gating execution indefinitely
+    uint256 public constant MAX_RESOLUTION_AGE = 7 days;
+
     struct CorpusEntry {
         bytes32 corpusHash;
         string storageURI;
@@ -223,6 +227,11 @@ contract LexiconHolder is AccessControl {
         // Check resolution cache first (pre-computed semantic results)
         ResolutionResult storage cached = resolutionCache[_creator][queryHash];
         if (cached.citations.length > 0) {
+            // [Audit fix: H-4] Reject stale resolutions — require resubmission by indexer
+            require(
+                block.timestamp - cached.resolvedAt <= MAX_RESOLUTION_AGE,
+                "Resolution is stale — resubmit via submitResolution"
+            );
             return _findBest(cached.citations, cached.confidences);
         }
 

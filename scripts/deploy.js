@@ -125,6 +125,16 @@ async function main() {
   console.log(`Chain ID: ${hre.network.config.chainId || 'N/A'}`);
   console.log(`Timestamp: ${new Date().toISOString()}`);
 
+  // [Audit fix: I-15] Network validation
+  if (!CONFIG.CONFIRMATIONS[network]) {
+    throw new Error(`Unknown network "${network}". Supported: ${Object.keys(CONFIG.CONFIRMATIONS).join(', ')}`);
+  }
+
+  // [Audit fix: C-3, I-11] Require multisig for mainnet deployment
+  if (network === 'mainnet' && !process.env.MULTISIG_ADDRESS) {
+    throw new Error("CRITICAL: MULTISIG_ADDRESS environment variable required for mainnet deployment. Deploy behind a multisig (e.g., Gnosis Safe) to prevent single-key privilege concentration.");
+  }
+
   // Safety check for mainnet
   if (network === 'mainnet') {
     console.log("\n⚠️  WARNING: Deploying to MAINNET!");
@@ -190,6 +200,12 @@ async function main() {
 
   // 8. Configure cross-contract permissions
   console.log("\nConfiguring cross-contract permissions...");
+
+  // [Audit fix: H-2] Grant SUNSET_ROLE to SunsetProtocol for activateSunset()
+  const SUNSET_ROLE = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("SUNSET_ROLE"));
+  const grantSunsetTx = await executionAgent.grantRole(SUNSET_ROLE, sunsetProtocolAddress);
+  await waitForConfirmations(grantSunsetTx, network);
+  console.log("  ✓ SUNSET_ROLE granted to SunsetProtocol");
 
   // Set ExecutionAgent in TriggerMechanism
   if (typeof triggerMechanism.setExecutionAgent === 'function') {
@@ -292,13 +308,63 @@ export const NETWORK_CONFIG = {
   console.log(`  - deployment-addresses.json`);
   console.log(`  - frontend/src/contracts/deployedAddresses.js`);
 
+  // [Audit fix: C-3, H-3, I-13] Role transfer to multisig
+  if (process.env.MULTISIG_ADDRESS && process.env.TRANSFER_ROLES === 'true') {
+    const multisig = process.env.MULTISIG_ADDRESS;
+    console.log(`\nTransferring roles to multisig: ${multisig}`);
+
+    const DEFAULT_ADMIN_ROLE = "0x0000000000000000000000000000000000000000000000000000000000000000";
+    const EXECUTOR_ROLE = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("EXECUTOR_ROLE"));
+    const INDEXER_ROLE = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("INDEXER_ROLE"));
+    const SUNSET_OPERATOR_ROLE = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("SUNSET_OPERATOR_ROLE"));
+    const MINTER_ROLE = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("MINTER_ROLE"));
+
+    // Grant admin roles to multisig
+    await (await executionAgent.grantRole(DEFAULT_ADMIN_ROLE, multisig)).wait();
+    await (await lexiconHolder.grantRole(DEFAULT_ADMIN_ROLE, multisig)).wait();
+    await (await sunsetProtocol.grantRole(DEFAULT_ADMIN_ROLE, multisig)).wait();
+    await (await ipToken.grantRole(DEFAULT_ADMIN_ROLE, multisig)).wait();
+    console.log("  ✓ DEFAULT_ADMIN_ROLE granted to multisig on AccessControl contracts");
+
+    // Transfer ownership on Ownable contracts
+    await (await intentModule.transferOwnership(multisig)).wait();
+    await (await triggerMechanism.transferOwnership(multisig)).wait();
+    console.log("  ✓ Ownership transferred to multisig on Ownable contracts");
+
+    // Renounce deployer's operational roles
+    await (await executionAgent.renounceRole(EXECUTOR_ROLE, deployer.address)).wait();
+    await (await lexiconHolder.renounceRole(INDEXER_ROLE, deployer.address)).wait();
+    await (await ipToken.renounceRole(MINTER_ROLE, deployer.address)).wait();
+    await (await ipToken.renounceRole(EXECUTOR_ROLE, deployer.address)).wait();
+    console.log("  ✓ Deployer operational roles renounced");
+
+    // Renounce deployer's admin roles (do this last — cannot be undone)
+    await (await executionAgent.renounceRole(DEFAULT_ADMIN_ROLE, deployer.address)).wait();
+    await (await lexiconHolder.renounceRole(DEFAULT_ADMIN_ROLE, deployer.address)).wait();
+    await (await sunsetProtocol.renounceRole(DEFAULT_ADMIN_ROLE, deployer.address)).wait();
+    await (await ipToken.renounceRole(DEFAULT_ADMIN_ROLE, deployer.address)).wait();
+    console.log("  ✓ Deployer admin roles renounced — multisig is now sole admin");
+
+    deploymentInfo.roleTransfer = {
+      multisig: multisig,
+      transferredAt: new Date().toISOString(),
+      deployerRolesRenounced: true
+    };
+
+    // Re-save deployment info with role transfer data
+    fs.writeFileSync(deploymentFile, JSON.stringify(deploymentInfo, null, 2));
+    fs.writeFileSync('deployment-addresses.json', JSON.stringify(deploymentInfo, null, 2));
+  }
+
   if (network !== 'hardhat' && network !== 'localhost') {
     console.log("\nNext Steps:");
     console.log("  1. Update frontend .env with contract addresses");
     console.log("  2. Verify contracts on block explorer (if not auto-verified)");
     console.log("  3. Configure oracle integrations");
     console.log("  4. Test all contract interactions");
-    console.log("  5. Transfer ownership to multi-sig (for production)");
+    if (!process.env.TRANSFER_ROLES) {
+      console.log("  5. Transfer roles to multi-sig: MULTISIG_ADDRESS=<addr> TRANSFER_ROLES=true npx hardhat run scripts/deploy.js");
+    }
   }
 
   console.log("\n" + "=".repeat(70));

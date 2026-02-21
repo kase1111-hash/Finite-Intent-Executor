@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol"; // [Audit fix: M-2]
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./IOracle.sol";
 
@@ -16,7 +16,7 @@ import "./IOracle.sol";
  * 3. Reputation tracking for oracle reliability
  * 4. Fallback mechanisms when oracles are unavailable
  */
-contract OracleRegistry is Ownable, ReentrancyGuard {
+contract OracleRegistry is Ownable2Step, ReentrancyGuard {
 
     // =============================================================================
     // STRUCTS
@@ -55,10 +55,21 @@ contract OracleRegistry is Ownable, ReentrancyGuard {
     uint256 public minReputationThreshold = 50;
 
     /// @dev Default number of oracles required for consensus
-    uint256 public defaultConsensusThreshold = 1;
+    /// @custom:audit-fix M-5 — increased from 1 to 2 to prevent single-oracle attacks
+    uint256 public defaultConsensusThreshold = 2;
 
     /// @dev Maximum number of oracles that can be registered
     uint256 public constant MAX_ORACLES = 20;
+
+    /// @dev [Audit fix: M-6] Balanced reputation rewards/penalties
+    uint256 public constant REPUTATION_REWARD = 2;
+    uint256 public constant REPUTATION_PENALTY = 3;
+
+    /// @dev [Audit fix: M-6] Minimum reputation floor — prevents full ejection by collusion
+    uint256 public constant MIN_REPUTATION_FLOOR = 10;
+
+    /// @dev [Audit fix: M-6] Dispute window for reversing suspicious aggregations
+    uint256 public constant AGGREGATION_DISPUTE_WINDOW = 7 days;
 
     /// @dev List of registered oracle addresses
     address[] public oracleList;
@@ -105,6 +116,9 @@ contract OracleRegistry is Ownable, ReentrancyGuard {
     );
     event ConsensusThresholdUpdated(uint256 newThreshold);
     event ReputationThresholdUpdated(uint256 newThreshold);
+    /// @custom:audit-fix M-6 — events for new reputation management functions
+    event AggregationDisputed(bytes32 indexed aggregationId, address indexed disputedBy);
+    event OracleReputationReset(address indexed oracle, uint256 newScore, address indexed resetBy);
 
     // =============================================================================
     // CONSTRUCTOR
@@ -185,6 +199,65 @@ contract OracleRegistry is Ownable, ReentrancyGuard {
         emit ReputationThresholdUpdated(_threshold);
     }
 
+    /**
+     * @dev Reset an oracle's reputation score (admin override)
+     * @param _oracle Address of the oracle
+     * @param _score New reputation score (0-100)
+     * @custom:audit-fix M-6 — allows admin to correct unfair collusion-based penalties
+     */
+    function resetOracleReputation(address _oracle, uint256 _score) external onlyOwner {
+        require(_score <= 100, "Invalid score");
+        require(oracles[_oracle].oracleAddress != address(0), "Oracle not registered");
+        oracles[_oracle].reputationScore = _score;
+        emit OracleReputationReset(_oracle, _score, msg.sender);
+    }
+
+    /**
+     * @dev Dispute and invalidate a suspicious aggregation result
+     * @param _aggregationId The aggregation to dispute
+     * @custom:audit-fix M-6 — reverses reputation changes from colluded aggregations
+     */
+    function disputeAggregation(bytes32 _aggregationId) external onlyOwner {
+        AggregatedVerification storage agg = aggregations[_aggregationId];
+        require(agg.isComplete, "Aggregation not complete");
+        require(
+            block.timestamp <= agg.requestTimestamp + AGGREGATION_DISPUTE_WINDOW,
+            "Dispute window closed"
+        );
+
+        // Reverse reputation changes
+        bool consensusResult = agg.isValid;
+        for (uint256 i = 0; i < oracleList.length; i++) {
+            address oracleAddr = oracleList[i];
+            if (oracleResponded[_aggregationId][oracleAddr]) {
+                bool oracleResult = oracleVerificationResult[_aggregationId][oracleAddr];
+                OracleInfo storage info = oracles[oracleAddr];
+
+                if (oracleResult == consensusResult) {
+                    // Was rewarded — reverse the reward
+                    info.reputationScore = info.reputationScore > REPUTATION_REWARD
+                        ? info.reputationScore - REPUTATION_REWARD
+                        : MIN_REPUTATION_FLOOR;
+                    if (info.successfulVerifications > 0) {
+                        info.successfulVerifications--;
+                    }
+                } else {
+                    // Was penalized — reverse the penalty
+                    uint256 newScore = info.reputationScore + REPUTATION_PENALTY;
+                    info.reputationScore = newScore > 100 ? 100 : newScore;
+                    if (info.failedVerifications > 0) {
+                        info.failedVerifications--;
+                    }
+                }
+
+                emit OracleReputationUpdated(oracleAddr, info.reputationScore);
+            }
+        }
+
+        agg.isValid = false;
+        emit AggregationDisputed(_aggregationId, msg.sender);
+    }
+
     // =============================================================================
     // VERIFICATION FUNCTIONS
     // =============================================================================
@@ -233,12 +306,17 @@ contract OracleRegistry is Ownable, ReentrancyGuard {
         });
 
         // Request verification from all active oracles
+        // [Audit fix: M-8] Wrapped in try/catch — a single reverting oracle no longer DoS-es aggregation
         for (uint256 i = 0; i < oracleList.length; i++) {
             address oracleAddr = oracleList[i];
             OracleInfo memory info = oracles[oracleAddr];
 
             if (info.isActive && info.reputationScore >= minReputationThreshold) {
-                IOracle(oracleAddr).requestVerification(_creator, _eventType, _dataHash);
+                try IOracle(oracleAddr).requestVerification(_creator, _eventType, _dataHash) {
+                    // success
+                } catch {
+                    // Oracle failed — skip and continue with remaining oracles
+                }
             }
         }
 
@@ -274,8 +352,9 @@ contract OracleRegistry is Ownable, ReentrancyGuard {
             agg.positiveVerifications++;
         }
 
-        // Update running average
-        agg.averageConfidence = ((agg.averageConfidence * (agg.receivedVerifications - 1)) + _confidence) / agg.receivedVerifications;
+        // Update running average [Audit fix: L-5] — round up to avoid truncation below threshold
+        uint256 numerator = (agg.averageConfidence * (agg.receivedVerifications - 1)) + _confidence;
+        agg.averageConfidence = (numerator + agg.receivedVerifications - 1) / agg.receivedVerifications;
 
         emit OracleVerificationReceived(_aggregationId, msg.sender, _isVerified, _confidence);
 
@@ -306,6 +385,7 @@ contract OracleRegistry is Ownable, ReentrancyGuard {
 
     /**
      * @dev Update oracle reputations based on consensus agreement
+     * @custom:audit-fix M-6 — Balanced +2/-3 instead of +1/-5, with MIN_REPUTATION_FLOOR
      */
     function _updateOracleReputations(bytes32 _aggregationId, bool _consensusResult) internal {
         for (uint256 i = 0; i < oracleList.length; i++) {
@@ -318,15 +398,14 @@ contract OracleRegistry is Ownable, ReentrancyGuard {
                 if (oracleResult == _consensusResult) {
                     // Oracle agreed with consensus - increase reputation
                     info.successfulVerifications++;
-                    if (info.reputationScore < 100) {
-                        info.reputationScore = info.reputationScore + 1 > 100 ? 100 : info.reputationScore + 1;
-                    }
+                    uint256 newScore = info.reputationScore + REPUTATION_REWARD;
+                    info.reputationScore = newScore > 100 ? 100 : newScore;
                 } else {
                     // Oracle disagreed with consensus - decrease reputation
                     info.failedVerifications++;
-                    if (info.reputationScore > 0) {
-                        info.reputationScore = info.reputationScore > 5 ? info.reputationScore - 5 : 0;
-                    }
+                    info.reputationScore = info.reputationScore > REPUTATION_PENALTY
+                        ? info.reputationScore - REPUTATION_PENALTY
+                        : MIN_REPUTATION_FLOOR;
                 }
 
                 emit OracleReputationUpdated(oracleAddr, info.reputationScore);

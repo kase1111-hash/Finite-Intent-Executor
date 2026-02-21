@@ -4,7 +4,9 @@
 
 This document provides security information for the Finite Intent Executor (FIE) smart contract system, including audit findings, known issues, and security best practices.
 
-**Audit Status:** Internal review completed 2025-12-23. External audit pending.
+**Audit Status:** Internal review completed 2025-12-23. Comprehensive automated security audit completed 2026-02-20. External audit pending.
+
+> **Latest audit report:** See [SECURITY_AUDIT_REPORT.md](./SECURITY_AUDIT_REPORT.md) for the full 2026-02-20 audit with 52 smart contract findings and 19 infrastructure findings.
 
 ---
 
@@ -173,6 +175,8 @@ Array bounds have been added to prevent DoS attacks:
 - Archive batch size: MAX_ARCHIVE_BATCH_SIZE = 50
 - Trusted signers: MAX_TRUSTED_SIGNERS = 20
 - Oracles: MAX_ORACLES = 10
+- Requests per creator (oracle adapters): MAX_REQUESTS_PER_CREATOR = 1000
+- Verification keys (ZK/Groth16/PLONK): MAX_VERIFICATION_KEYS = 100
 
 **Note:** These limits should be sufficient for normal operation while preventing gas exhaustion attacks.
 
@@ -281,6 +285,7 @@ Focus areas for future audits:
 
 | Date | Auditor | Type | Findings |
 |------|---------|------|----------|
+| 2026-02-20 | Automated (Claude Code) | Full Codebase Security Audit | 3 Critical, 4 High, 22 Medium, 23 Low + 19 infra |
 | 2025-12-23 | Internal | Security Review | 4 Critical, 9 High, 12 Medium, 6 Low |
 
 ---
@@ -308,6 +313,59 @@ Before mainnet deployment, engage external auditors to:
 ---
 
 ## Changelog
+
+### 2026-02-20 - Comprehensive Security Audit + Remediation
+
+Full codebase security audit covering all 17 Solidity contracts (~6,400 LOC), frontend, scripts, CI/CD, and dependencies. See [SECURITY_AUDIT_REPORT.md](./SECURITY_AUDIT_REPORT.md) for the complete report. See [REMEDIATION_PLAN.md](./REMEDIATION_PLAN.md) for the full plan.
+
+**Remediation implemented (same day):**
+- **C-1 FIXED**: PLONK path disabled in ZKVerifierAdapter — key registration blocked, verification reverts
+- **C-2 FIXED**: `submitOracleProof` now reverts unconditionally
+- **C-3 MITIGATED**: Deploy script requires `MULTISIG_ADDRESS` for mainnet; role transfer function added
+- **H-1 FIXED**: `allowPlaceholderVerification` now immutable (constructor param); Groth16 verifier required; STARK reverts
+- **H-2 FIXED**: `activateSunset()` now requires `SUNSET_ROLE` (granted to SunsetProtocol)
+- **H-4 MITIGATED**: Resolution cache now enforces 7-day staleness check
+- **M-2 FIXED**: 9 Ownable contracts migrated to Ownable2Step
+- **M-5 FIXED**: Oracle consensus threshold increased from 1 to 2
+- **M-8 FIXED**: Oracle calls wrapped in try/catch
+- **M-13/14/15 FIXED**: Zero-address checks on fund/license/royalty functions
+- **M-16/17 FIXED**: TreasuryDeposit and RoyaltyInfoUpdated events added
+- **M-18 FIXED**: Public-domain tokens now non-transferable via _update() override
+- **L-1/2 FIXED**: nonReentrant added to depositToTreasury and executeDeadmanSwitch
+- **L-12 FIXED**: Duplicate signer check in configureTrustedQuorum
+- **L-17 FIXED**: VersionSigned event added
+- **L-21 FIXED**: Unused assetTransitioned mapping removed
+- **I-1 FIXED**: .env.example placeholder key cleared
+- **I-4/16/19 FIXED**: Security CI job added (npm audit, secrets scan, Slither)
+- **I-5 FIXED**: CSP header added to frontend
+- **I-17 FIXED**: Dependabot configuration added
+
+**Additional fixes (second pass):**
+- **M-3 FIXED**: Removed auto-authorization of deployer as operator in ChainlinkAdapter
+- **M-11 FIXED**: Bounded `creatorRequests` arrays (MAX_REQUESTS_PER_CREATOR=1000) in ChainlinkAdapter, UMAAdapter, ZKVerifierAdapter
+- **M-12 FIXED**: Bounded `keyIds` arrays (MAX_VERIFICATION_KEYS=100) in Groth16Verifier, PlonkVerifier, ZKVerifierAdapter
+- **M-19 FIXED**: Leet-speak normalization added to PoliticalFilter
+- **M-20 FIXED**: Expanded misspelling dictionary (party names, senator, ballot, partisan)
+- **M-21 FIXED**: Promoted republican/democrat from secondary to primary keywords
+- **M-22 FIXED**: Removed unused ErrorHandler import from ExecutionAgent
+- **L-3 FIXED**: `disputeVerification` restricted to request creator in ChainlinkAdapter
+- **L-5 FIXED**: Round-up confidence averaging in OracleRegistry
+- **L-6 FIXED**: Use `forceApprove` in UMAAdapter for ERC20 approve-reset safety
+- **L-14 FIXED**: Zero-address checks in UMAAdapter constructor
+- **L-15 FIXED**: Intent overwrite prevention in IntentCaptureModule.captureIntent
+- **L-16 FIXED**: Zero-address/hash validation in SunsetProtocol.archiveAssets
+- **L-18 FIXED**: Completion flag prevents double `completeSunset`
+- **L-19 FIXED**: Distinct `RequestExpired` event in ChainlinkAdapter
+- **L-20 FIXED**: Proportional revenue tracking per license in IPToken.payRoyalty
+
+**Final fixes (third pass):**
+- **M-6 FIXED**: Oracle reputation redesign — balanced +2/-3 penalties, MIN_REPUTATION_FLOOR=10, admin `resetOracleReputation()`, `disputeAggregation()` with 7-day window
+- **M-9 FIXED**: Deadman switch front-running — commit-reveal mechanism (2-block delay)
+- **L-11 FIXED**: ZK proof timestamp — caller-supplied `_proofTimestamp` with MAX_PROOF_TIMESTAMP_DRIFT=1h validation
+- **L-23 FIXED**: PoliticalFilter targeted homoglyph detection — allows accented Latin, CJK, emoji; blocks only Cyrillic/Greek lookalikes
+- **L-24 FIXED**: PoliticalFilter gas optimization — bigram fast-path skips full scan for non-political strings
+
+**All findings addressed.** No remaining items.
 
 ### 2026-02-08 - Refocus Plan Phases 0-4
 
@@ -397,4 +455,4 @@ Before mainnet deployment, engage external auditors to:
 
 *This security documentation should be updated as vulnerabilities are discovered and fixed.*
 
-*Last Updated: 2026-02-08*
+*Last Updated: 2026-02-20*
