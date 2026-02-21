@@ -1,5 +1,5 @@
-const { expect } = require("chai");
-const { ethers } = require("hardhat");
+import { expect } from "chai";
+import { ethers } from "hardhat";
 
 describe("PoliticalFilter", function () {
   let executionAgent, lexiconHolder;
@@ -535,7 +535,7 @@ describe("PoliticalFilter", function () {
   // Parameterized Corpus Tests (from test/fixtures/political-filter-corpus.json)
   // ==========================================================================
   describe("Corpus Test Suite", function () {
-    const corpus = require("./fixtures/political-filter-corpus.json");
+    const { default: corpus } = await import("./fixtures/political-filter-corpus.json", { with: { type: "json" } });
 
     describe("Must-block actions", function () {
       corpus.must_block.forEach(({ action, reason }) => {

@@ -1,6 +1,10 @@
-const hre = require("hardhat");
-const fs = require('fs');
-const path = require('path');
+import hre from "hardhat";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Finite Intent Executor - Production Deployment Script
@@ -373,15 +377,13 @@ export const NETWORK_CONFIG = {
 }
 
 // Export for testing
-module.exports = { main, CONFIG };
+export { main, CONFIG };
 
-// Run if called directly
-if (require.main === module) {
-  main()
-    .then(() => process.exit(0))
-    .catch((error) => {
-      console.error("\n❌ Deployment failed:");
-      console.error(error);
-      process.exit(1);
-    });
-}
+// Run if called directly via `hardhat run`
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error("\n❌ Deployment failed:");
+    console.error(error);
+    process.exit(1);
+  });

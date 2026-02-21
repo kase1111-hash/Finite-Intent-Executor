@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  compile:
-    name: Compile Contracts
+  build:
+    name: Build Contracts
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,14 +17,12 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - run: npx hardhat compile
-      - name: Check contract sizes
-        run: REPORT_SIZE=true npx hardhat compile
+      - run: npx hardhat build
 
   test:
     name: Run Tests
     runs-on: ubuntu-latest
-    needs: compile
+    needs: build
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,13 +31,11 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npx hardhat test
-        env:
-          REPORT_GAS: true
 
   coverage:
     name: Coverage Check
     runs-on: ubuntu-latest
-    needs: compile
+    needs: build
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -47,11 +43,11 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - run: npx hardhat coverage
+      - run: npx hardhat test --coverage
       - name: Check coverage threshold
         run: |
           # Extract statement coverage percentage from coverage summary
-          COVERAGE=$(npx hardhat coverage 2>&1 | grep "All files" | awk '{print $4}' | sed 's/%//')
+          COVERAGE=$(npx hardhat test --coverage 2>&1 | grep "All files" | awk '{print $4}' | sed 's/%//')
           echo "Statement coverage: ${COVERAGE}%"
           if [ -z "$COVERAGE" ]; then
             echo "Warning: Could not parse coverage. Skipping threshold check."
@@ -84,7 +80,7 @@ jobs:
   security:
     name: Security Checks
     runs-on: ubuntu-latest
-    needs: compile
+    needs: build
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
