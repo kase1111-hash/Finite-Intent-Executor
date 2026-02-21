@@ -37,7 +37,7 @@
     "dotenv": "^17.3.1",
     "hardhat": "^2.22.0",
     "hardhat-contract-sizer": "^2.10.0",
-    "hardhat-gas-reporter": "^1.0.10"
+    "hardhat-gas-reporter": "^2.3.0"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^5.4.0"
