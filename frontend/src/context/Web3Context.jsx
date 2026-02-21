@@ -1,9 +1,20 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react'
 import { ethers } from 'ethers'
 import toast from 'react-hot-toast'
 import { CONTRACT_ADDRESSES, CONTRACT_ABIS } from '../contracts/config'
 
 const Web3Context = createContext(null)
+
+// [Audit fix: I-9] Throttle helper — ignores calls within the cooldown window
+function useThrottle(fn, delayMs) {
+  const lastCall = useRef(0)
+  return useCallback((...args) => {
+    const now = Date.now()
+    if (now - lastCall.current < delayMs) return
+    lastCall.current = now
+    return fn(...args)
+  }, [fn, delayMs])
+}
 
 export function Web3Provider({ children }) {
   const [provider, setProvider] = useState(null)
@@ -32,7 +43,7 @@ export function Web3Provider({ children }) {
     return contractInstances
   }, [])
 
-  const connect = useCallback(async () => {
+  const connectInner = useCallback(async () => {
     if (typeof window.ethereum === 'undefined') {
       toast.error('Please install MetaMask to use this application')
       return false
@@ -66,6 +77,9 @@ export function Web3Provider({ children }) {
     }
   }, [initializeContracts])
 
+  // [Audit fix: I-9] Throttle connect to prevent rapid-fire RPC calls
+  const connect = useThrottle(connectInner, 500)
+
   const disconnect = useCallback(() => {
     setProvider(null)
     setSigner(null)
@@ -79,7 +93,12 @@ export function Web3Provider({ children }) {
   useEffect(() => {
     if (typeof window.ethereum === 'undefined') return
 
+    // [Audit fix: I-9] Throttle wallet event handlers to prevent rapid RPC bursts
+    let lastAccountChange = 0
     const handleAccountsChanged = (accounts) => {
+      const now = Date.now()
+      if (now - lastAccountChange < 500) return
+      lastAccountChange = now
       if (accounts.length === 0) {
         disconnect()
       } else if (accounts[0] !== account) {
@@ -88,7 +107,11 @@ export function Web3Provider({ children }) {
       }
     }
 
+    let lastChainChange = 0
     const handleChainChanged = (chainIdHex) => {
+      const now = Date.now()
+      if (now - lastChainChange < 500) return
+      lastChainChange = now
       const newChainId = parseInt(chainIdHex, 16)
       setChainId(newChainId)
       toast.success('Network changed')

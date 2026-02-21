@@ -10,9 +10,9 @@
  *   const solidityProof = generator.formatProofForSolidity(proof, publicSignals);
  */
 
-const { buildPoseidon } = require("circomlibjs");
-const snarkjs = require("snarkjs");
-const { ethers } = require("ethers");
+import { buildPoseidon } from "circomlibjs";
+import snarkjs from "snarkjs";
+import { ethers } from "ethers";
 
 /**
  * Certificate types matching the circuit
@@ -367,14 +367,10 @@ class CertificateBuilder {
 }
 
 // Export classes
-module.exports = {
-    ZKProofGenerator,
-    CertificateBuilder,
-    CertificateType
-};
+export { ZKProofGenerator, CertificateBuilder, CertificateType };
 
 // Example usage (when run directly)
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
     console.log("ZK Proof Generator Utility");
     console.log("==========================");
     console.log("");

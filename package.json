@@ -2,19 +2,17 @@
   "name": "finite-intent-executor",
   "version": "0.1.0-alpha",
   "description": "A blockchain-based system for capturing and executing posthumous intent with strict bounds on duration, scope, and agency",
-  "main": "index.js",
+  "type": "module",
   "scripts": {
-    "compile": "hardhat compile",
+    "build": "hardhat build",
     "test": "hardhat test",
-    "test:gas": "REPORT_GAS=true hardhat test",
-    "test:coverage": "hardhat coverage",
+    "test:coverage": "hardhat test --coverage",
     "deploy": "hardhat run scripts/deploy.js",
     "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
     "deploy:mainnet": "hardhat run scripts/deploy.js --network mainnet",
     "deploy:base": "hardhat run scripts/deploy.js --network base",
     "node": "hardhat node",
     "verify": "hardhat verify",
-    "size": "REPORT_SIZE=true hardhat compile",
     "clean": "hardhat clean"
   },
   "keywords": [
@@ -30,14 +28,26 @@
   "author": "",
   "license": "CC0-1.0",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
-    "dotenv": "^17.3.1",
-    "hardhat": "^2.22.0",
-    "hardhat-contract-sizer": "^2.10.0",
-    "hardhat-gas-reporter": "^1.0.10"
+    "@nomicfoundation/hardhat-ethers": "^4.0.4",
+    "@nomicfoundation/hardhat-ethers-chai-matchers": "^3.0.1",
+    "@nomicfoundation/hardhat-ignition": "^3.0.7",
+    "@nomicfoundation/hardhat-ignition-ethers": "^3.0.7",
+    "@nomicfoundation/hardhat-keystore": "^3.0.2",
+    "@nomicfoundation/hardhat-mocha": "^3.0.10",
+    "@nomicfoundation/hardhat-network-helpers": "^3.0.3",
+    "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.2",
+    "@nomicfoundation/hardhat-typechain": "^3.0.1",
+    "@nomicfoundation/hardhat-verify": "^3.0.10",
+    "@nomicfoundation/ignition-core": "^3.0.7",
+    "chai": "^5.1.2",
+    "ethers": "^6.14.0",
+    "hardhat": "^3.1.9",
+    "mocha": "^11.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.0"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^5.4.0"

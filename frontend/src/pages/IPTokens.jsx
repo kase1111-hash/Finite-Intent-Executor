@@ -128,7 +128,7 @@ function IPTokens() {
       fetchTokens()
     } catch (err) {
       console.error('Failed to mint:', err)
-      toast.error(err.reason || 'Failed to mint IP token')
+      toast.error('Failed to mint IP token. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -166,7 +166,7 @@ function IPTokens() {
       })
     } catch (err) {
       console.error('Failed to grant license:', err)
-      toast.error(err.reason || 'Failed to grant license')
+      toast.error('Failed to grant license. Please try again.')
     } finally {
       setSubmitting(false)
     }

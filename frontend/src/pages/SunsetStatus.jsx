@@ -74,7 +74,7 @@ function SunsetStatus() {
       fetchSunsetData()
     } catch (err) {
       console.error('Failed to initiate sunset:', err)
-      toast.error(err.reason || 'Failed to initiate sunset')
+      toast.error('Failed to initiate sunset. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -107,7 +107,7 @@ function SunsetStatus() {
       fetchSunsetData()
     } catch (err) {
       console.error('Failed to archive assets:', err)
-      toast.error(err.reason || 'Failed to archive assets')
+      toast.error('Failed to archive assets. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -123,7 +123,7 @@ function SunsetStatus() {
       fetchSunsetData()
     } catch (err) {
       console.error('Failed to transition IP:', err)
-      toast.error(err.reason || 'Failed to transition IP')
+      toast.error('Failed to transition IP. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -139,7 +139,7 @@ function SunsetStatus() {
       fetchSunsetData()
     } catch (err) {
       console.error('Failed to complete sunset:', err)
-      toast.error(err.reason || 'Failed to complete sunset')
+      toast.error('Failed to complete sunset. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -159,7 +159,7 @@ function SunsetStatus() {
       fetchSunsetData()
     } catch (err) {
       console.error('Failed to trigger emergency sunset:', err)
-      toast.error(err.reason || 'Failed to trigger emergency sunset')
+      toast.error('Failed to trigger emergency sunset. Please try again.')
     } finally {
       setSubmitting(false)
     }

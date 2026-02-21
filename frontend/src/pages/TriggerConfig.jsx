@@ -71,7 +71,7 @@ function TriggerConfig() {
       fetchTriggerConfig()
     } catch (err) {
       console.error('Failed to configure:', err)
-      toast.error(err.reason || 'Failed to configure deadman switch')
+      toast.error('Failed to configure deadman switch. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -102,7 +102,7 @@ function TriggerConfig() {
       fetchTriggerConfig()
     } catch (err) {
       console.error('Failed to configure:', err)
-      toast.error(err.reason || 'Failed to configure trusted quorum')
+      toast.error('Failed to configure trusted quorum. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -126,7 +126,7 @@ function TriggerConfig() {
       fetchTriggerConfig()
     } catch (err) {
       console.error('Failed to configure:', err)
-      toast.error(err.reason || 'Failed to configure oracle verification')
+      toast.error('Failed to configure oracle verification. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -142,7 +142,7 @@ function TriggerConfig() {
       fetchTriggerConfig()
     } catch (err) {
       console.error('Failed to check in:', err)
-      toast.error(err.reason || 'Failed to check in')
+      toast.error('Failed to check in. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -158,7 +158,7 @@ function TriggerConfig() {
       fetchTriggerConfig()
     } catch (err) {
       console.error('Failed to submit signature:', err)
-      toast.error(err.reason || 'Failed to submit signature')
+      toast.error('Failed to submit signature. Please try again.')
     } finally {
       setSubmitting(false)
     }
