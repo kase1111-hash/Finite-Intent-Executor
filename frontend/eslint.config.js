@@ -5,11 +5,11 @@ import globals from 'globals';
 
 export default [
   js.configs.recommended,
+  reactHooks.configs.flat.recommended,
   {
     files: ['**/*.{js,jsx}'],
     plugins: {
       react,
-      'react-hooks': reactHooks,
     },
     languageOptions: {
       ecmaVersion: 'latest',
@@ -30,7 +30,6 @@ export default [
     },
     rules: {
       ...react.configs.recommended.rules,
-      ...reactHooks.configs.recommended.rules,
       'react/react-in-jsx-scope': 'off',
       'react/prop-types': 'off',
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
