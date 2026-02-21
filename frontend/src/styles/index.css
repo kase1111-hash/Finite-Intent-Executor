@@ -1,6 +1,32 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/* Custom theme — replaces tailwind.config.js theme.extend */
+@theme {
+  --color-primary-50: #f0f9ff;
+  --color-primary-100: #e0f2fe;
+  --color-primary-200: #bae6fd;
+  --color-primary-300: #7dd3fc;
+  --color-primary-400: #38bdf8;
+  --color-primary-500: #0ea5e9;
+  --color-primary-600: #0284c7;
+  --color-primary-700: #0369a1;
+  --color-primary-800: #075985;
+  --color-primary-900: #0c4a6e;
+
+  --color-sunset-50: #fff7ed;
+  --color-sunset-100: #ffedd5;
+  --color-sunset-200: #fed7aa;
+  --color-sunset-300: #fdba74;
+  --color-sunset-400: #fb923c;
+  --color-sunset-500: #f97316;
+  --color-sunset-600: #ea580c;
+  --color-sunset-700: #c2410c;
+  --color-sunset-800: #9a3412;
+  --color-sunset-900: #7c2d12;
+
+  --animate-fade-in: fadeIn 0.3s ease-out;
+  --animate-pulse-slow: pulse-slow 2s infinite;
+}
 
 @layer base {
   body {
@@ -8,94 +34,110 @@
   }
 }
 
-@layer components {
-  .btn {
-    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
-  }
+/* Component utilities — using @utility so variants work in TW4 */
 
-  .btn-primary {
-    @apply btn bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
-  }
+@utility btn {
+  @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+}
 
-  .btn-secondary {
-    @apply btn bg-gray-200 text-gray-800 hover:bg-gray-300 focus:ring-gray-400;
-  }
+@utility btn-primary {
+  @apply btn bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
+}
 
-  .btn-danger {
-    @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
-  }
+@utility btn-secondary {
+  @apply btn bg-gray-200 text-gray-800 hover:bg-gray-300 focus:ring-gray-400;
+}
 
-  .btn-success {
-    @apply btn bg-green-600 text-white hover:bg-green-700 focus:ring-green-500;
-  }
+@utility btn-danger {
+  @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+}
 
-  .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden;
-  }
+@utility btn-success {
+  @apply btn bg-green-600 text-white hover:bg-green-700 focus:ring-green-500;
+}
 
-  .card-header {
-    @apply px-6 py-4 border-b border-gray-200 bg-gray-50;
-  }
+@utility card {
+  @apply bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden;
+}
 
-  .card-body {
-    @apply p-6;
-  }
+@utility card-header {
+  @apply px-6 py-4 border-b border-gray-200 bg-gray-50;
+}
 
-  .input {
-    @apply w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200;
-  }
+@utility card-body {
+  @apply p-6;
+}
 
-  .input-error {
-    @apply border-red-500 focus:ring-red-500;
-  }
+@utility input {
+  @apply w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200;
+}
 
-  .label {
-    @apply block text-sm font-medium text-gray-700 mb-1;
-  }
+@utility input-error {
+  @apply border-red-500 focus:ring-red-500;
+}
 
-  .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
-  }
+@utility label {
+  @apply block text-sm font-medium text-gray-700 mb-1;
+}
 
-  .badge-success {
-    @apply badge bg-green-100 text-green-800;
-  }
+@utility badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
 
-  .badge-warning {
-    @apply badge bg-yellow-100 text-yellow-800;
-  }
+@utility badge-success {
+  @apply badge bg-green-100 text-green-800;
+}
 
-  .badge-danger {
-    @apply badge bg-red-100 text-red-800;
-  }
+@utility badge-warning {
+  @apply badge bg-yellow-100 text-yellow-800;
+}
 
-  .badge-info {
-    @apply badge bg-blue-100 text-blue-800;
-  }
+@utility badge-danger {
+  @apply badge bg-red-100 text-red-800;
+}
 
-  .badge-neutral {
-    @apply badge bg-gray-100 text-gray-800;
-  }
+@utility badge-info {
+  @apply badge bg-blue-100 text-blue-800;
+}
 
-  .stat-card {
-    @apply card p-6;
-  }
+@utility badge-neutral {
+  @apply badge bg-gray-100 text-gray-800;
+}
 
-  .stat-value {
-    @apply text-3xl font-bold text-gray-900;
-  }
+@utility stat-card {
+  @apply card p-6;
+}
 
-  .stat-label {
-    @apply text-sm text-gray-500 mt-1;
-  }
+@utility stat-value {
+  @apply text-3xl font-bold text-gray-900;
+}
 
-  .nav-link {
-    @apply flex items-center gap-3 px-4 py-3 text-gray-600 hover:bg-gray-100 hover:text-gray-900 rounded-lg transition-colors duration-200;
-  }
+@utility stat-label {
+  @apply text-sm text-gray-500 mt-1;
+}
 
-  .nav-link-active {
-    @apply nav-link bg-primary-50 text-primary-700 hover:bg-primary-100;
-  }
+@utility nav-link {
+  @apply flex items-center gap-3 px-4 py-3 text-gray-600 hover:bg-gray-100 hover:text-gray-900 rounded-lg transition-colors duration-200;
+}
+
+@utility nav-link-active {
+  @apply nav-link bg-primary-50 text-primary-700 hover:bg-primary-100;
+}
+
+@utility sunset-progress {
+  @apply relative h-4 bg-gray-200 rounded-full overflow-hidden;
+}
+
+@utility sunset-progress-bar {
+  @apply absolute inset-y-0 left-0 bg-linear-to-r from-sunset-400 to-sunset-600 transition-all duration-500;
+}
+
+@utility upload-dropzone {
+  @apply border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer transition-all duration-200 hover:border-primary-400 hover:bg-primary-50/30;
+}
+
+@utility upload-dropzone-active {
+  @apply border-primary-500 bg-primary-50 scale-[1.02];
 }
 
 /* Custom scrollbar */
@@ -112,7 +154,7 @@
   @apply bg-gray-300 rounded-full hover:bg-gray-400;
 }
 
-/* Animations */
+/* Keyframes */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: translateY(0); }
@@ -121,30 +163,4 @@
 @keyframes pulse-slow {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out;
-}
-
-.animate-pulse-slow {
-  animation: pulse-slow 2s infinite;
-}
-
-/* Progress bar for sunset countdown */
-.sunset-progress {
-  @apply relative h-4 bg-gray-200 rounded-full overflow-hidden;
-}
-
-.sunset-progress-bar {
-  @apply absolute inset-y-0 left-0 bg-gradient-to-r from-sunset-400 to-sunset-600 transition-all duration-500;
-}
-
-/* Document Upload Dropzone */
-.upload-dropzone {
-  @apply border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer transition-all duration-200 hover:border-primary-400 hover:bg-primary-50/30;
-}
-
-.upload-dropzone-active {
-  @apply border-primary-500 bg-primary-50 scale-[1.02];
 }

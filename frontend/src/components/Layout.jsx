@@ -57,7 +57,7 @@ function Layout() {
       >
         <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-sunset-500 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-linear-to-br from-primary-500 to-sunset-500 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-sm">FIE</span>
             </div>
             <span className="font-semibold text-gray-900">Finite Intent</span>

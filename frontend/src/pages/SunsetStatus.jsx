@@ -232,7 +232,7 @@ function SunsetStatus() {
 
       {/* Countdown Card */}
       {triggerTimestamp && !isComplete && (
-        <div className="card bg-gradient-to-br from-sunset-50 to-sunset-100 border-sunset-200">
+        <div className="card bg-linear-to-br from-sunset-50 to-sunset-100 border-sunset-200">
           <div className="card-body">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-4">
