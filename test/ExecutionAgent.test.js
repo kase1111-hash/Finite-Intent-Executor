@@ -1,6 +1,8 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
+import { network } from "hardhat";
+
+const { ethers, networkHelpers } = await network.connect();
+const { time } = networkHelpers;
 
 describe("ExecutionAgent", function () {
   let executionAgent, lexiconHolder;
@@ -25,6 +27,11 @@ describe("ExecutionAgent", function () {
     // Grant executor role
     const EXECUTOR_ROLE = await executionAgent.EXECUTOR_ROLE();
     await executionAgent.grantRole(EXECUTOR_ROLE, executor.address);
+
+    // [Audit fix: H-2] activateSunset() is gated on SUNSET_ROLE. In production the
+    // SunsetProtocol contract holds it; these tests drive the agent directly.
+    const SUNSET_ROLE = await executionAgent.SUNSET_ROLE();
+    await executionAgent.grantRole(SUNSET_ROLE, owner.address);
 
     // Set up lexicon holder with frozen corpus
     const corpusHash = ethers.keccak256(ethers.toUtf8Bytes("Corpus"));
@@ -102,6 +109,7 @@ describe("ExecutionAgent", function () {
 
     it("Should return false after sunset", async function () {
       await executionAgent.connect(executor).activateExecution(creator.address);
+      await time.increase(TWENTY_YEARS + 1);
       await executionAgent.activateSunset(creator.address);
 
       expect(await executionAgent.isExecutionActive(creator.address)).to.equal(false);
@@ -177,6 +185,8 @@ describe("ExecutionAgent", function () {
     });
 
     it("Should reject execution when not active", async function () {
+      // execution was activated in beforeEach; sunset it to deactivate
+      await time.increase(TWENTY_YEARS + 1);
       await executionAgent.activateSunset(creator.address);
 
       await expect(
@@ -797,6 +807,8 @@ describe("ExecutionAgent", function () {
 
       const EXECUTOR_ROLE = await freshAgent.EXECUTOR_ROLE();
       await freshAgent.grantRole(EXECUTOR_ROLE, executor.address);
+      const SUNSET_ROLE = await freshAgent.SUNSET_ROLE();
+      await freshAgent.grantRole(SUNSET_ROLE, owner.address);
 
       await freshAgent.connect(executor).activateExecution(creator.address);
       await time.increase(TWENTY_YEARS + 1);

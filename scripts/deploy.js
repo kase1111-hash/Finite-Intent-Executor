@@ -14,7 +14,7 @@ const __dirname = path.dirname(__filename);
  * Usage:
  *   npx hardhat run scripts/deploy.js --network <network>
  *
- * Networks: hardhat, localhost, sepolia, goerli, mainnet, base, baseSepolia
+ * Networks: default (in-process), localhost, sepolia, goerli, mainnet, base, baseSepolia
  *
  * Environment Variables:
  *   PRIVATE_KEY - Deployer wallet private key
@@ -38,6 +38,8 @@ const CONFIG = {
 
   // Confirmation counts by network
   CONFIRMATIONS: {
+    // "default" is Hardhat 3's in-process simulated network
+    default: 1,
     hardhat: 1,
     localhost: 1,
     sepolia: 2,
@@ -73,9 +75,12 @@ async function verifyContract(address, constructorArgs, network) {
 
   console.log(`  Verifying contract at ${address}...`);
   try {
-    await hre.run("verify:verify", {
+    // Hardhat 3 replaces hre.run(...) with the task registry. The "verify" task
+    // takes `address` positionally and `constructorArgs` as a variadic argument
+    // (Hardhat 2 called the latter `constructorArguments`).
+    await hre.tasks.getTask(["verify"]).run({
       address: address,
-      constructorArguments: constructorArgs,
+      constructorArgs: constructorArgs,
     });
     console.log(`  ✓ Contract verified`);
   } catch (error) {
@@ -121,12 +126,17 @@ async function deployContract(name, factory, args = [], network) {
  * Main deployment function
  */
 async function main() {
-  const network = hre.network.name;
+  // Hardhat 3: ethers and the network config come from an explicit connection
+  // rather than being hung off the `hre` object.
+  const connection = await hre.network.connect();
+  const { ethers } = connection;
+  const network = connection.networkName;
+  const chainId = connection.networkConfig.chainId;
   console.log("=".repeat(70));
   console.log("Finite Intent Executor (FIE) - Deployment");
   console.log("=".repeat(70));
   console.log(`Network: ${network}`);
-  console.log(`Chain ID: ${hre.network.config.chainId || 'N/A'}`);
+  console.log(`Chain ID: ${chainId || 'N/A'}`);
   console.log(`Timestamp: ${new Date().toISOString()}`);
 
   // [Audit fix: I-15] Network validation
@@ -147,33 +157,33 @@ async function main() {
   }
 
   // Get deployer account
-  const [deployer] = await hre.ethers.getSigners();
-  const balance = await hre.ethers.provider.getBalance(deployer.address);
+  const [deployer] = await ethers.getSigners();
+  const balance = await ethers.provider.getBalance(deployer.address);
   console.log(`\nDeployer: ${deployer.address}`);
-  console.log(`Balance: ${hre.ethers.formatEther(balance)} ETH`);
+  console.log(`Balance: ${ethers.formatEther(balance)} ETH`);
 
   // Check minimum balance
-  const minBalance = hre.ethers.parseEther("0.1");
-  if (balance < minBalance && network !== 'hardhat' && network !== 'localhost') {
+  const minBalance = ethers.parseEther("0.1");
+  if (balance < minBalance && network !== 'default' && network !== 'hardhat' && network !== 'localhost') {
     throw new Error(`Insufficient balance. Need at least 0.1 ETH for deployment.`);
   }
 
   const deployedContracts = {};
 
   // 1. Deploy LexiconHolder (no dependencies)
-  const LexiconHolder = await hre.ethers.getContractFactory("LexiconHolder");
+  const LexiconHolder = await ethers.getContractFactory("LexiconHolder");
   const { contract: lexiconHolder, address: lexiconHolderAddress } =
     await deployContract("LexiconHolder", LexiconHolder, [], network);
   deployedContracts.LexiconHolder = lexiconHolderAddress;
 
   // 2. Deploy IntentCaptureModule
-  const IntentCaptureModule = await hre.ethers.getContractFactory("IntentCaptureModule");
+  const IntentCaptureModule = await ethers.getContractFactory("IntentCaptureModule");
   const { contract: intentModule, address: intentModuleAddress } =
     await deployContract("IntentCaptureModule", IntentCaptureModule, [], network);
   deployedContracts.IntentCaptureModule = intentModuleAddress;
 
   // 3. Deploy TriggerMechanism
-  const TriggerMechanism = await hre.ethers.getContractFactory("TriggerMechanism");
+  const TriggerMechanism = await ethers.getContractFactory("TriggerMechanism");
   const { contract: triggerMechanism, address: triggerMechanismAddress } =
     await deployContract("TriggerMechanism", TriggerMechanism, [intentModuleAddress], network);
   deployedContracts.TriggerMechanism = triggerMechanismAddress;
@@ -185,19 +195,19 @@ async function main() {
   console.log("  ✓ TriggerMechanism authorized");
 
   // 5. Deploy ExecutionAgent
-  const ExecutionAgent = await hre.ethers.getContractFactory("ExecutionAgent");
+  const ExecutionAgent = await ethers.getContractFactory("ExecutionAgent");
   const { contract: executionAgent, address: executionAgentAddress } =
     await deployContract("ExecutionAgent", ExecutionAgent, [lexiconHolderAddress], network);
   deployedContracts.ExecutionAgent = executionAgentAddress;
 
   // 6. Deploy SunsetProtocol
-  const SunsetProtocol = await hre.ethers.getContractFactory("SunsetProtocol");
+  const SunsetProtocol = await ethers.getContractFactory("SunsetProtocol");
   const { contract: sunsetProtocol, address: sunsetProtocolAddress } =
     await deployContract("SunsetProtocol", SunsetProtocol, [executionAgentAddress, lexiconHolderAddress], network);
   deployedContracts.SunsetProtocol = sunsetProtocolAddress;
 
   // 7. Deploy IPToken
-  const IPToken = await hre.ethers.getContractFactory("IPToken");
+  const IPToken = await ethers.getContractFactory("IPToken");
   const { contract: ipToken, address: ipTokenAddress } =
     await deployContract("IPToken", IPToken, [], network);
   deployedContracts.IPToken = ipTokenAddress;
@@ -206,7 +216,7 @@ async function main() {
   console.log("\nConfiguring cross-contract permissions...");
 
   // [Audit fix: H-2] Grant SUNSET_ROLE to SunsetProtocol for activateSunset()
-  const SUNSET_ROLE = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("SUNSET_ROLE"));
+  const SUNSET_ROLE = ethers.keccak256(ethers.toUtf8Bytes("SUNSET_ROLE"));
   const grantSunsetTx = await executionAgent.grantRole(SUNSET_ROLE, sunsetProtocolAddress);
   await waitForConfirmations(grantSunsetTx, network);
   console.log("  ✓ SUNSET_ROLE granted to SunsetProtocol");
@@ -247,10 +257,10 @@ async function main() {
   // 10. Save deployment info
   const deploymentInfo = {
     network: network,
-    chainId: hre.network.config.chainId,
+    chainId: chainId,
     deployer: deployer.address,
     timestamp: new Date().toISOString(),
-    blockNumber: await hre.ethers.provider.getBlockNumber(),
+    blockNumber: await ethers.provider.getBlockNumber(),
     contracts: deployedContracts,
     configuration: {
       sunsetDurationYears: 20,
@@ -286,7 +296,7 @@ export const DEPLOYED_ADDRESSES = {
 };
 
 export const NETWORK_CONFIG = {
-  chainId: ${hre.network.config.chainId || 31337},
+  chainId: ${chainId || 31337},
   name: "${network}"
 };
 `;
@@ -318,10 +328,10 @@ export const NETWORK_CONFIG = {
     console.log(`\nTransferring roles to multisig: ${multisig}`);
 
     const DEFAULT_ADMIN_ROLE = "0x0000000000000000000000000000000000000000000000000000000000000000";
-    const EXECUTOR_ROLE = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("EXECUTOR_ROLE"));
-    const INDEXER_ROLE = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("INDEXER_ROLE"));
-    const SUNSET_OPERATOR_ROLE = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("SUNSET_OPERATOR_ROLE"));
-    const MINTER_ROLE = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("MINTER_ROLE"));
+    const EXECUTOR_ROLE = ethers.keccak256(ethers.toUtf8Bytes("EXECUTOR_ROLE"));
+    const INDEXER_ROLE = ethers.keccak256(ethers.toUtf8Bytes("INDEXER_ROLE"));
+    const SUNSET_OPERATOR_ROLE = ethers.keccak256(ethers.toUtf8Bytes("SUNSET_OPERATOR_ROLE"));
+    const MINTER_ROLE = ethers.keccak256(ethers.toUtf8Bytes("MINTER_ROLE"));
 
     // Grant admin roles to multisig
     await (await executionAgent.grantRole(DEFAULT_ADMIN_ROLE, multisig)).wait();
@@ -360,7 +370,7 @@ export const NETWORK_CONFIG = {
     fs.writeFileSync('deployment-addresses.json', JSON.stringify(deploymentInfo, null, 2));
   }
 
-  if (network !== 'hardhat' && network !== 'localhost') {
+  if (network !== 'default' && network !== 'hardhat' && network !== 'localhost') {
     console.log("\nNext Steps:");
     console.log("  1. Update frontend .env with contract addresses");
     console.log("  2. Verify contracts on block explorer (if not auto-verified)");

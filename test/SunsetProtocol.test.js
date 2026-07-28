@@ -1,6 +1,8 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
+import { network } from "hardhat";
+
+const { ethers, networkHelpers } = await network.connect();
+const { time } = networkHelpers;
 
 describe("SunsetProtocol", function () {
   let sunsetProtocol, executionAgent, lexiconHolder;
@@ -29,6 +31,13 @@ describe("SunsetProtocol", function () {
       await lexiconHolder.getAddress()
     );
     await sunsetProtocol.waitForDeployment();
+
+    // [Audit fix: H-2] activateSunset() is gated on SUNSET_ROLE; SunsetProtocol
+    // is the intended holder (mirrors scripts/deploy.js).
+    await executionAgent.grantRole(
+      await executionAgent.SUNSET_ROLE(),
+      await sunsetProtocol.getAddress()
+    );
 
     // Grant roles
     const SUNSET_OPERATOR_ROLE = await sunsetProtocol.SUNSET_OPERATOR_ROLE();

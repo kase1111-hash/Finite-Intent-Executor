@@ -230,7 +230,7 @@ contract LexiconHolder is AccessControl {
             // [Audit fix: H-4] Reject stale resolutions — require resubmission by indexer
             require(
                 block.timestamp - cached.resolvedAt <= MAX_RESOLUTION_AGE,
-                "Resolution is stale — resubmit via submitResolution"
+                "Resolution is stale - resubmit via submitResolution"
             );
             return _findBest(cached.citations, cached.confidences);
         }

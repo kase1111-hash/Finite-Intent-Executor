@@ -547,7 +547,7 @@ contract ZKVerifierAdapter is IOracle, Ownable2Step, ReentrancyGuard {
         // [Audit fix: C-1] PlonkVerifier's core functions (_computeLinearization,
         // _computeBatchedCommitment, _computeBatchedEvaluation, _pairingCheck) return
         // trivial values — any structurally valid proof passes. Disabled until completed.
-        revert("PLONK verification disabled — verifier is placeholder");
+        revert("PLONK verification disabled - verifier is placeholder");
     }
 
     /**

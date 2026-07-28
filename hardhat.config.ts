@@ -32,6 +32,15 @@ const config: HardhatUserConfig = {
   },
 
   networks: {
+    // Simulated network used by `hardhat test`. Pinned to the same EVM version
+    // the contracts are compiled for; otherwise it tracks the latest hardfork,
+    // where EIP-7825 caps a transaction at 2^24 gas. Coverage runs unoptimised,
+    // and the PoliticalFilter full scan exceeds that cap under instrumentation.
+    default: {
+      type: "edr-simulated",
+      hardfork: "cancun",
+    },
+
     // Ethereum Testnets
     sepolia: {
       type: "http",
@@ -72,9 +81,13 @@ const config: HardhatUserConfig = {
     },
   },
 
-  // Mocha test configuration
-  mocha: {
-    timeout: 120_000,
+  // Mocha test configuration. Hardhat 3 reads this from `test.mocha`; a
+  // top-level `mocha` key is silently ignored, leaving the 40s default in
+  // place, which the coverage run exceeds.
+  test: {
+    mocha: {
+      timeout: 120_000,
+    },
   },
 };
 

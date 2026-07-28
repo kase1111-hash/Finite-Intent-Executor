@@ -31,6 +31,10 @@ contract ExecutionAgentFuzzTest is Test {
         // Grant executor role
         executionAgent.grantRole(executionAgent.EXECUTOR_ROLE(), executor);
 
+        // [Audit fix: H-2] activateSunset() is gated on SUNSET_ROLE; this test
+        // contract drives the agent directly, so it holds the role here.
+        executionAgent.grantRole(executionAgent.SUNSET_ROLE(), address(this));
+
         // Setup lexicon holder
         lexiconHolder.freezeCorpus(
             creator,

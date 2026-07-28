@@ -1,5 +1,8 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import { network } from "hardhat";
+import corpus from "./fixtures/political-filter-corpus.json" with { type: "json" };
+
+const { ethers } = await network.connect();
 
 describe("PoliticalFilter", function () {
   let executionAgent, lexiconHolder;
@@ -323,20 +326,24 @@ describe("PoliticalFilter", function () {
       });
     });
 
-    describe("party terms — should allow (advisory only)", function () {
-      it("should allow actions containing 'republican'", async function () {
-        await expectAllowed("support_republican_party");
+    // [Audit fix: M-21] 'republican' and 'democrat' are unambiguous party
+    // references and were promoted from secondary (advisory) to primary
+    // (blocking). 'conservative' and 'liberal' stay advisory because they carry
+    // common non-political senses ("conservative estimate").
+    describe("party terms", function () {
+      it("should block actions containing 'republican'", async function () {
+        await expectPoliticalBlock("support_republican_party");
       });
 
-      it("should allow actions containing 'democrat'", async function () {
-        await expectAllowed("join_democrat_caucus");
+      it("should block actions containing 'democrat'", async function () {
+        await expectPoliticalBlock("join_democrat_caucus");
       });
 
-      it("should allow actions containing 'conservative'", async function () {
+      it("should allow actions containing 'conservative' (advisory only)", async function () {
         await expectAllowed("fund_conservative_group");
       });
 
-      it("should allow actions containing 'liberal'", async function () {
+      it("should allow actions containing 'liberal' (advisory only)", async function () {
         await expectAllowed("liberal_agenda_support");
       });
     });
@@ -365,24 +372,56 @@ describe("PoliticalFilter", function () {
       ).to.be.revertedWith("Action violates No Political Agency Clause");
     });
 
-    it("should block actions with multi-byte UTF-8 characters", async function () {
+    // [Audit fix: L-23] Detection is targeted at Cyrillic/Greek homoglyphs rather
+    // than rejecting every byte >= 0x80, so international text is no longer blocked.
+    it("should allow actions with multi-byte CJK characters", async function () {
       // Chinese character embedded in otherwise benign string
       const nonAsciiAction = "fund_\u4e16\u754c_project";
-      await expect(
-        executionAgent.connect(executor).executeAction(
-          creator.address, nonAsciiAction, nonAsciiAction, corpusHash
-        )
-      ).to.be.revertedWith("Action violates No Political Agency Clause");
+      await expectAllowed(nonAsciiAction);
     });
 
-    it("should block actions with accented Latin characters", async function () {
+    it("should allow actions with accented Latin characters", async function () {
       // 'e' with acute accent (U+00E9) is multi-byte in UTF-8
       const accentedAction = "cr\u00e9ate_fund";
-      await expect(
-        executionAgent.connect(executor).executeAction(
-          creator.address, accentedAction, accentedAction, corpusHash
-        )
-      ).to.be.revertedWith("Action violates No Political Agency Clause");
+      await expectAllowed(accentedAction);
+    });
+  });
+
+  // ==========================================================================
+  // Layer -1: the [Audit fix: L-24] bigram fast path
+  // ==========================================================================
+  // checkAction() short-circuits and returns "not political" when the string
+  // contains none of the gate bigrams, so a term listed in a later layer is
+  // silently unreachable unless some bigram covers it. "super pac" was listed
+  // in the phrase patterns but matched no bigram, so it passed the filter.
+  describe("Layer -1 - fast-path gate must not hide later layers", function () {
+    it("should block 'super pac' (phrase reachable through the gate)", async function () {
+      await expectPoliticalBlock("super pac");
+    });
+
+    it("should block 'super pac funding'", async function () {
+      await expectPoliticalBlock("super pac funding");
+    });
+
+    it("should block 'SUPER PAC donation' (case-insensitive)", async function () {
+      await expectPoliticalBlock("SUPER PAC donation");
+    });
+
+    // Advisory terms do not block, but they must still reach the secondary
+    // layer so they are categorised rather than dropped by the fast path.
+    it("should allow advisory terms that only the gate could have hidden", async function () {
+      for (const action of [
+        "advocacy_for_open_source",
+        "advocate_better_tooling",
+        "persuade_the_maintainers",
+        "sway_the_roadmap",
+      ]) {
+        await expectAllowed(action);
+      }
+    });
+
+    it("should still allow a benign string with no political bigram", async function () {
+      await expectAllowed("ship_the_build");
     });
   });
 
@@ -535,8 +574,6 @@ describe("PoliticalFilter", function () {
   // Parameterized Corpus Tests (from test/fixtures/political-filter-corpus.json)
   // ==========================================================================
   describe("Corpus Test Suite", function () {
-    const { default: corpus } = await import("./fixtures/political-filter-corpus.json", { with: { type: "json" } });
-
     describe("Must-block actions", function () {
       corpus.must_block.forEach(({ action, reason }) => {
         it(`should block: "${action}" (${reason})`, async function () {
