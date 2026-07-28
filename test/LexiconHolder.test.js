@@ -1,5 +1,7 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import { network } from "hardhat";
+
+const { ethers } = await network.connect();
 
 describe("LexiconHolder", function () {
   let lexiconHolder;

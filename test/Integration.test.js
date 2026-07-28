@@ -1,6 +1,9 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
+import { network } from "hardhat";
+import { executeDeadmanSwitch } from "./helpers.js";
+
+const { ethers, networkHelpers } = await network.connect();
+const { time } = networkHelpers;
 
 describe("Integration Tests - Full Lifecycle", function () {
   let intentModule, triggerMechanism, executionAgent, lexiconHolder, sunsetProtocol, ipToken;
@@ -36,6 +39,13 @@ describe("Integration Tests - Full Lifecycle", function () {
       await lexiconHolder.getAddress()
     );
     await sunsetProtocol.waitForDeployment();
+
+    // [Audit fix: H-2] activateSunset() is gated on SUNSET_ROLE; SunsetProtocol
+    // is the intended holder (mirrors scripts/deploy.js).
+    await executionAgent.grantRole(
+      await executionAgent.SUNSET_ROLE(),
+      await sunsetProtocol.getAddress()
+    );
 
     const IPToken = await ethers.getContractFactory("IPToken");
     ipToken = await IPToken.deploy();
@@ -256,7 +266,7 @@ describe("Integration Tests - Full Lifecycle", function () {
       await time.increase(NINETY_DAYS + 1);
 
       // Execute deadman switch
-      await triggerMechanism.executeDeadmanSwitch(creator.address);
+      await executeDeadmanSwitch(triggerMechanism, creator.address, networkHelpers);
 
       // Verify triggered
       const intent = await intentModule.getIntent(creator.address);
@@ -419,7 +429,7 @@ describe("Integration Tests - Full Lifecycle", function () {
       // Attempt to trigger should fail
       await expect(
         triggerMechanism.connect(signer1).submitTrustedSignature(creator.address)
-      ).to.not.be.reverted; // Signature accepted
+      ).to.not.be.revert(ethers); // Signature accepted
 
       await expect(
         triggerMechanism.connect(signer2).submitTrustedSignature(creator.address)
@@ -498,7 +508,7 @@ describe("Integration Tests - Full Lifecycle", function () {
       // Trigger first creator's intent via deadman
       await triggerMechanism.connect(creators[0]).configureDeadmanSwitch(NINETY_DAYS);
       await time.increase(NINETY_DAYS + 1);
-      await triggerMechanism.executeDeadmanSwitch(creators[0].address);
+      await executeDeadmanSwitch(triggerMechanism, creators[0].address, networkHelpers);
 
       // Verify only first creator triggered
       expect((await intentModule.getIntent(creators[0].address)).isTriggered).to.equal(true);

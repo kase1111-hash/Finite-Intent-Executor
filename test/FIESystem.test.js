@@ -1,6 +1,8 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
+import { network } from "hardhat";
+
+const { ethers, networkHelpers } = await network.connect();
+const { time } = networkHelpers;
 
 describe("Finite Intent Executor System", function () {
   let intentModule, triggerMechanism, executionAgent, lexiconHolder, sunsetProtocol, ipToken;
@@ -32,6 +34,13 @@ describe("Finite Intent Executor System", function () {
       await lexiconHolder.getAddress()
     );
     await sunsetProtocol.waitForDeployment();
+
+    // [Audit fix: H-2] activateSunset() is gated on SUNSET_ROLE; SunsetProtocol
+    // is the intended holder (mirrors scripts/deploy.js).
+    await executionAgent.grantRole(
+      await executionAgent.SUNSET_ROLE(),
+      await sunsetProtocol.getAddress()
+    );
 
     const IPToken = await ethers.getContractFactory("IPToken");
     ipToken = await IPToken.deploy();

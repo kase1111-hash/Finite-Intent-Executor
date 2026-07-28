@@ -1,9 +1,12 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
+import { network } from "hardhat";
+import { executeDeadmanSwitch } from "./helpers.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+
+const { ethers, networkHelpers } = await network.connect();
+const { time } = networkHelpers;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -274,6 +277,13 @@ describe("E2E Realistic Scenario — Alex Chen", function () {
     );
     await sunsetProtocol.waitForDeployment();
 
+    // [Audit fix: H-2] activateSunset() is gated on SUNSET_ROLE; SunsetProtocol
+    // is the intended holder (mirrors scripts/deploy.js).
+    await executionAgent.grantRole(
+      await executionAgent.SUNSET_ROLE(),
+      await sunsetProtocol.getAddress()
+    );
+
     const IPToken = await ethers.getContractFactory("IPToken");
     ipToken = await IPToken.deploy();
     await ipToken.waitForDeployment();
@@ -390,7 +400,21 @@ describe("E2E Realistic Scenario — Alex Chen", function () {
       return Math.round(5 + sigmoid * 93); // [5, 98]
     }
 
-    // Second pass: submit calibrated scores on-chain
+    // Phase 5: Configure deadman switch (30-day interval)
+    await triggerMechanism.connect(creator).configureDeadmanSwitch(THIRTY_DAYS);
+
+    // Phase 6: Creator stops checking in (simulates death)
+    await time.increase(THIRTY_DAYS + 1);
+    await executeDeadmanSwitch(triggerMechanism, creator.address, networkHelpers);
+
+    // Phase 7: Activate execution
+    await executionAgent.activateExecution(creator.address);
+
+    // Second pass: submit calibrated scores on-chain.
+    //
+    // [Audit fix: H-4] Cached resolutions expire after MAX_RESOLUTION_AGE (7 days),
+    // so the indexer submits them after the trigger fires rather than before —
+    // the 30-day deadman interval would otherwise age them out before execution.
     for (const { tq, result } of rawResults) {
       const onChainConfidence = calibrate(result.score);
 
@@ -401,16 +425,6 @@ describe("E2E Realistic Scenario — Alex Chen", function () {
         [onChainConfidence]
       );
     }
-
-    // Phase 5: Configure deadman switch (30-day interval)
-    await triggerMechanism.connect(creator).configureDeadmanSwitch(THIRTY_DAYS);
-
-    // Phase 6: Creator stops checking in (simulates death)
-    await time.increase(THIRTY_DAYS + 1);
-    await triggerMechanism.executeDeadmanSwitch(creator.address);
-
-    // Phase 7: Activate execution
-    await executionAgent.activateExecution(creator.address);
 
     // Deposit funds for project funding and revenue distribution
     await executionAgent.depositToTreasury(creator.address, {

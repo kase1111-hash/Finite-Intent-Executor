@@ -1,6 +1,8 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
+import { network } from "hardhat";
+
+const { ethers, networkHelpers } = await network.connect();
+const { time } = networkHelpers;
 
 describe("IntentCaptureModule", function () {
   let intentModule, ipToken;
@@ -69,7 +71,10 @@ describe("IntentCaptureModule", function () {
         .withArgs(creator.address, intentHash, corpusHash, await time.latest() + 1);
     });
 
-    it("Should allow updating intent before trigger", async function () {
+    // [Audit fix: L-15] captureIntent() used to overwrite an existing intent,
+    // letting a compromised key silently replace a creator's whole intent graph.
+    // Capture is now single-shot.
+    it("Should reject re-capturing an intent", async function () {
       await intentModule.connect(creator).captureIntent(
         intentHash,
         corpusHash,
@@ -81,18 +86,20 @@ describe("IntentCaptureModule", function () {
       );
 
       const newIntentHash = ethers.keccak256(ethers.toUtf8Bytes("Updated Intent"));
-      await intentModule.connect(creator).captureIntent(
-        newIntentHash,
-        corpusHash,
-        "ipfs://new-corpus-uri",
-        "ipfs://new-assets-uri",
-        2021,
-        2026,
-        [await ipToken.getAddress()]
-      );
+      await expect(
+        intentModule.connect(creator).captureIntent(
+          newIntentHash,
+          corpusHash,
+          "ipfs://new-corpus-uri",
+          "ipfs://new-assets-uri",
+          2021,
+          2026,
+          [await ipToken.getAddress()]
+        )
+      ).to.be.revertedWith("Intent already captured");
 
       const intent = await intentModule.getIntent(creator.address);
-      expect(intent.intentHash).to.equal(newIntentHash);
+      expect(intent.intentHash).to.equal(intentHash);
     });
 
     describe("Corpus Window Validation", function () {

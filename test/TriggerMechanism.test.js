@@ -1,6 +1,9 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
+import { network } from "hardhat";
+import { executeDeadmanSwitch } from "./helpers.js";
+
+const { ethers, networkHelpers } = await network.connect();
+const { time } = networkHelpers;
 
 describe("TriggerMechanism", function () {
   let intentModule, triggerMechanism, ipToken;
@@ -148,7 +151,7 @@ describe("TriggerMechanism", function () {
       it("Should execute deadman switch after interval elapsed", async function () {
         await time.increase(NINETY_DAYS + 1);
 
-        await triggerMechanism.executeDeadmanSwitch(creator.address);
+        await executeDeadmanSwitch(triggerMechanism, creator.address, networkHelpers);
 
         const config = await triggerMechanism.getTriggerConfig(creator.address);
         expect(config.isTriggered).to.equal(true);
@@ -160,7 +163,7 @@ describe("TriggerMechanism", function () {
       it("Should emit IntentTriggered event", async function () {
         await time.increase(NINETY_DAYS + 1);
 
-        await expect(triggerMechanism.executeDeadmanSwitch(creator.address))
+        await expect(executeDeadmanSwitch(triggerMechanism, creator.address, networkHelpers))
           .to.emit(triggerMechanism, "IntentTriggered");
       });
 
@@ -168,16 +171,16 @@ describe("TriggerMechanism", function () {
         await time.increase(NINETY_DAYS - 100);
 
         await expect(
-          triggerMechanism.executeDeadmanSwitch(creator.address)
+          executeDeadmanSwitch(triggerMechanism, creator.address, networkHelpers)
         ).to.be.revertedWith("Deadman interval not elapsed");
       });
 
       it("Should reject if already triggered", async function () {
         await time.increase(NINETY_DAYS + 1);
-        await triggerMechanism.executeDeadmanSwitch(creator.address);
+        await executeDeadmanSwitch(triggerMechanism, creator.address, networkHelpers);
 
         await expect(
-          triggerMechanism.executeDeadmanSwitch(creator.address)
+          executeDeadmanSwitch(triggerMechanism, creator.address, networkHelpers)
         ).to.be.revertedWith("Already triggered");
       });
 
@@ -189,7 +192,7 @@ describe("TriggerMechanism", function () {
 
         // Should fail because check-in reset the timer
         await expect(
-          triggerMechanism.executeDeadmanSwitch(creator.address)
+          executeDeadmanSwitch(triggerMechanism, creator.address, networkHelpers)
         ).to.be.revertedWith("Deadman interval not elapsed");
       });
     });
@@ -321,41 +324,40 @@ describe("TriggerMechanism", function () {
       });
     });
 
-    describe("Oracle Proof Submission", function () {
+    // [Audit fix: C-2] submitOracleProof() never validated the proof bytes, so a
+    // single registered oracle could irreversibly trigger a creator's entire
+    // intent. The direct path is now disabled unconditionally; these tests pin
+    // that it stays disabled for every caller.
+    describe("Oracle Proof Submission (disabled)", function () {
+      const DISABLED =
+        "Direct oracle mode disabled - use OracleRegistry or ZKVerifierAdapter";
+
       beforeEach(async function () {
         await triggerMechanism.connect(creator).configureOracleVerified([oracle1.address, oracle2.address]);
       });
 
-      it("Should accept proof from authorized oracle", async function () {
-        const proof = ethers.toUtf8Bytes("ZK proof data");
-        await triggerMechanism.connect(oracle1).submitOracleProof(creator.address, proof);
-
-        const config = await triggerMechanism.getTriggerConfig(creator.address);
-        expect(config.isTriggered).to.equal(true);
-      });
-
-      it("Should emit OracleProofSubmitted event", async function () {
+      it("Should reject proof from an authorized oracle", async function () {
         const proof = ethers.toUtf8Bytes("ZK proof data");
         await expect(
           triggerMechanism.connect(oracle1).submitOracleProof(creator.address, proof)
-        ).to.emit(triggerMechanism, "OracleProofSubmitted")
-          .withArgs(creator.address, oracle1.address);
+        ).to.be.revertedWith(DISABLED);
       });
 
-      it("Should reject proof from unauthorized oracle", async function () {
+      it("Should reject proof from an unauthorized oracle", async function () {
         const proof = ethers.toUtf8Bytes("ZK proof data");
         await expect(
           triggerMechanism.connect(signer1).submitOracleProof(creator.address, proof)
-        ).to.be.revertedWith("Not an authorized oracle");
+        ).to.be.revertedWith(DISABLED);
       });
 
-      it("Should reject proof for already triggered intent", async function () {
+      it("Should leave the trigger untriggered after a rejected submission", async function () {
         const proof = ethers.toUtf8Bytes("ZK proof data");
-        await triggerMechanism.connect(oracle1).submitOracleProof(creator.address, proof);
-
         await expect(
-          triggerMechanism.connect(oracle2).submitOracleProof(creator.address, proof)
-        ).to.be.revertedWith("Already triggered");
+          triggerMechanism.connect(oracle1).submitOracleProof(creator.address, proof)
+        ).to.be.revertedWith(DISABLED);
+
+        const config = await triggerMechanism.getTriggerConfig(creator.address);
+        expect(config.isTriggered).to.equal(false);
       });
     });
   });
@@ -420,7 +422,7 @@ describe("TriggerMechanism", function () {
     it("Should reject reconfiguring after trigger - deadman", async function () {
       await triggerMechanism.connect(creator).configureDeadmanSwitch(NINETY_DAYS);
       await time.increase(NINETY_DAYS + 1);
-      await triggerMechanism.executeDeadmanSwitch(creator.address);
+      await executeDeadmanSwitch(triggerMechanism, creator.address, networkHelpers);
 
       await expect(
         triggerMechanism.connect(creator).configureDeadmanSwitch(THIRTY_DAYS)
@@ -440,10 +442,16 @@ describe("TriggerMechanism", function () {
       ).to.be.revertedWith("Already triggered");
     });
 
-    it("Should reject reconfiguring after trigger - oracle", async function () {
-      await triggerMechanism.connect(creator).configureOracleVerified([oracle1.address]);
-      const proof = ethers.toUtf8Bytes("proof");
-      await triggerMechanism.connect(oracle1).submitOracleProof(creator.address, proof);
+    it("Should reject reconfiguring to oracle mode after trigger", async function () {
+      // [Audit fix: C-2] direct oracle submission can no longer trigger an intent,
+      // so the trigger is driven through the quorum path; the property under test
+      // is that configureOracleVerified() is rejected once triggered.
+      await triggerMechanism.connect(creator).configureTrustedQuorum(
+        [signer1.address, signer2.address],
+        2
+      );
+      await triggerMechanism.connect(signer1).submitTrustedSignature(creator.address);
+      await triggerMechanism.connect(signer2).submitTrustedSignature(creator.address);
 
       await expect(
         triggerMechanism.connect(creator).configureOracleVerified([oracle2.address])
@@ -498,15 +506,17 @@ describe("TriggerMechanism", function () {
     it("Should reject submitOracleProof with empty proof data", async function () {
       await triggerMechanism.connect(creator).configureOracleVerified([oracle1.address]);
 
+      // [Audit fix: C-2] direct mode is disabled outright, so empty proof data is
+      // rejected by the same guard as any other payload.
       await expect(
         triggerMechanism.connect(oracle1).submitOracleProof(creator.address, "0x")
-      ).to.be.revertedWith("Proof data required");
+      ).to.be.revertedWith("Direct oracle mode disabled - use OracleRegistry or ZKVerifierAdapter");
     });
 
     it("Should reject check-in after deadman switch has triggered", async function () {
       await triggerMechanism.connect(creator).configureDeadmanSwitch(NINETY_DAYS);
       await time.increase(NINETY_DAYS + 1);
-      await triggerMechanism.executeDeadmanSwitch(creator.address);
+      await executeDeadmanSwitch(triggerMechanism, creator.address, networkHelpers);
 
       await expect(
         triggerMechanism.connect(creator).checkIn()

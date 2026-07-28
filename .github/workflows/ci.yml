@@ -73,6 +73,10 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: stable
+      # forge-std is not vendored in the repository, so the test contracts
+      # cannot resolve "forge-std/Test.sol" without this step.
+      - name: Install forge-std
+        run: forge install foundry-rs/forge-std
       - name: Run Foundry tests
         run: forge test --profile ci -vvv
 

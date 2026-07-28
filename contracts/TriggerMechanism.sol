@@ -533,8 +533,8 @@ contract TriggerMechanism is Ownable2Step, ReentrancyGuard {
 
         // [Audit fix: M-9] Commit-reveal: caller must have committed >= COMMIT_REVEAL_DELAY blocks ago
         uint256 commitBlock = deadmanCommitBlocks[_creator][msg.sender];
-        require(commitBlock > 0, "No commitment found — call commitDeadmanExecution first");
-        require(block.number >= commitBlock + COMMIT_REVEAL_DELAY, "Reveal too early — wait for commit delay");
+        require(commitBlock > 0, "No commitment found - call commitDeadmanExecution first");
+        require(block.number >= commitBlock + COMMIT_REVEAL_DELAY, "Reveal too early - wait for commit delay");
 
         // Verify commitment matches
         bytes32 expected = keccak256(abi.encodePacked(msg.sender, _creator, commitBlock));
@@ -588,7 +588,7 @@ contract TriggerMechanism is Ownable2Step, ReentrancyGuard {
         // meaning any non-empty payload from a single oracle could irreversibly trigger
         // a creator's entire posthumous intent. Use OracleRegistry (multi-oracle consensus)
         // or ZKVerifierAdapter (on-chain ZK proof verification) instead.
-        revert("Direct oracle mode disabled — use OracleRegistry or ZKVerifierAdapter");
+        revert("Direct oracle mode disabled - use OracleRegistry or ZKVerifierAdapter");
     }
 
     /**

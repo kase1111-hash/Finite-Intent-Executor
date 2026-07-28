@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useWeb3Context } from '../context/Web3Context';
 import {
   Activity,
@@ -42,9 +42,11 @@ const MonitoringDashboard = () => {
 
   // Event state
   const [events, setEvents] = useState([]);
-  const [filteredEvents, setFilteredEvents] = useState([]);
-  const [isStreaming, setIsStreaming] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+
+  // Clock used by the time-range filter. Kept in state (rather than reading
+  // Date.now() during render) so the cutoff stays pure and actually advances.
+  const [now, setNow] = useState(() => Date.now());
 
   // Filter state
   const [filters, setFilters] = useState({
@@ -120,8 +122,6 @@ const MonitoringDashboard = () => {
   // Subscribe to contract events
   const subscribeToEvents = useCallback(async () => {
     if (!contracts || !provider) return;
-
-    setIsStreaming(true);
 
     const eventHandlers = [];
 
@@ -230,25 +230,25 @@ const MonitoringDashboard = () => {
 
     return () => {
       eventHandlers.forEach(cleanup => cleanup());
-      setIsStreaming(false);
     };
   }, [contracts, provider, formatEvent]);
 
   // Initialize security integration
   const initializeSecurity = useCallback(async () => {
     try {
-      // Dynamic import for security client (works with webpack code splitting)
+      // Vite exposes build-time env under import.meta.env with a VITE_ prefix;
+      // `process` does not exist in the browser bundle.
       const securityConfig = {
         siem: {
-          apiUrl: process.env.REACT_APP_BOUNDARY_SIEM_URL || 'http://localhost:8080',
-          apiKey: process.env.REACT_APP_BOUNDARY_SIEM_API_KEY,
+          apiUrl: import.meta.env.VITE_BOUNDARY_SIEM_URL || 'http://localhost:8080',
+          apiKey: import.meta.env.VITE_BOUNDARY_SIEM_API_KEY,
           transport: 'rest'
         },
         daemon: {
-          host: process.env.REACT_APP_BOUNDARY_DAEMON_HOST || 'localhost',
-          port: parseInt(process.env.REACT_APP_BOUNDARY_DAEMON_PORT || '9999')
+          host: import.meta.env.VITE_BOUNDARY_DAEMON_HOST || 'localhost',
+          port: parseInt(import.meta.env.VITE_BOUNDARY_DAEMON_PORT || '9999')
         },
-        enabled: process.env.REACT_APP_SECURITY_ENABLED !== 'false'
+        enabled: import.meta.env.VITE_SECURITY_ENABLED !== 'false'
       };
 
       // Attempt to connect to security services
@@ -366,6 +366,10 @@ const MonitoringDashboard = () => {
 
   // Initialize security on mount
   useEffect(() => {
+    // initializeSecurity() only calls setState after `await fetch(...)`, so it
+    // never updates state synchronously during the effect. The rule does not
+    // model await boundaries, hence the targeted disable.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     initializeSecurity();
 
     // Periodic health check
@@ -390,8 +394,15 @@ const MonitoringDashboard = () => {
     });
   }, [events, reportToSIEM]);
 
-  // Apply filters
+  // Advance the time-range clock so relative filters ("last 1h") stay accurate.
   useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(tick);
+  }, []);
+
+  // Apply filters. Derived from events + filters, so it is computed during
+  // render rather than mirrored into state by an effect.
+  const filteredEvents = useMemo(() => {
     let filtered = [...events];
 
     if (filters.eventType !== 'all') {
@@ -407,7 +418,6 @@ const MonitoringDashboard = () => {
     }
 
     if (filters.timeRange !== 'all') {
-      const now = Date.now();
       const ranges = {
         '1h': 60 * 60 * 1000,
         '24h': 24 * 60 * 60 * 1000,
@@ -417,8 +427,8 @@ const MonitoringDashboard = () => {
       filtered = filtered.filter(e => e.timestamp.getTime() > cutoff);
     }
 
-    setFilteredEvents(filtered);
-  }, [events, filters]);
+    return filtered;
+  }, [events, filters, now]);
 
   // Auto-refresh subscription
   useEffect(() => {

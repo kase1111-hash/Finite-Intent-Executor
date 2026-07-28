@@ -595,6 +595,16 @@ library PoliticalFilter {
      *   "al" (electoral, ballot), "ol" (political), "en" (endorsement),
      *   "ep" (republican), "em" (democrat)
      *
+     * The gate must also cover the phrase and secondary layers, otherwise a term
+     * listed there is never reached:
+     *   "pa" (super pac), "ad" (advocacy, advocate, persuade), "wa" (sway)
+     *
+     * @notice INVARIANT: every term matched by _isPrimaryPoliticalKeyword,
+     *         _isCommonMisspelling, _containsPoliticalPhrase and
+     *         _isSecondaryPoliticalKeyword must contain at least one bigram
+     *         below. Adding a term to any of those layers without a covering
+     *         bigram silently disables it. See the "fast-path gate" tests.
+     *
      * @return true if the string contains at least one political bigram (needs full scan)
      */
     function _containsPoliticalBigram(bytes memory actionBytes) private pure returns (bool) {
@@ -608,7 +618,9 @@ library PoliticalFilter {
                 (a == "a" && b == "r") || (a == "a" && b == "l") ||
                 (a == "o" && b == "l") || (a == "e" && b == "n") ||
                 (a == "e" && b == "p") || (a == "e" && b == "m") ||
-                (a == "a" && b == "w") || (a == "o" && b == "n")) {
+                (a == "a" && b == "w") || (a == "o" && b == "n") ||
+                (a == "p" && b == "a") || (a == "a" && b == "d") ||
+                (a == "w" && b == "a")) {
                 return true;
             }
         }

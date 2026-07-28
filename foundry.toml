@@ -1,7 +1,9 @@
 [profile.default]
 src = "contracts"
 out = "foundry-out"
-libs = ["node_modules"]
+# "lib" holds forge-std (installed by `forge install foundry-rs/forge-std`);
+# "node_modules" holds the npm-managed dependencies such as OpenZeppelin.
+libs = ["lib", "node_modules"]
 test = "foundry-tests/test"
 
 # Solidity settings

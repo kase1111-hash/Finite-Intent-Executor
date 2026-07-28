@@ -1,6 +1,8 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
+import { network } from "hardhat";
+
+const { ethers, networkHelpers } = await network.connect();
+const { time } = networkHelpers;
 
 /**
  * Gas Benchmarking Tests
@@ -26,15 +28,18 @@ describe("Gas Benchmarking", function () {
   const ONE_YEAR = 365 * 24 * 60 * 60;
   const TWENTY_YEARS = 20 * 365 * 24 * 60 * 60;
 
-  const logGas = async (category, operation, tx) => {
-    const receipt = await tx.wait();
-    const gasUsed = receipt.gasUsed;
+  const logGasAmount = (category, operation, gasUsed) => {
     gasResults.push({
       category,
       operation,
       gasUsed: gasUsed.toString(),
       estimatedCostAt30Gwei: (Number(gasUsed) * 30 / 1e9).toFixed(6)
     });
+  };
+
+  const logGas = async (category, operation, tx) => {
+    const receipt = await tx.wait();
+    logGasAmount(category, operation, receipt.gasUsed);
     return receipt;
   };
 
@@ -121,6 +126,12 @@ describe("Gas Benchmarking", function () {
       );
       sunsetProtocol = await tx.waitForDeployment();
       await logGas("1. Deployment", "SunsetProtocol", tx.deploymentTransaction());
+
+      // [Audit fix: H-2] SunsetProtocol needs SUNSET_ROLE to call activateSunset()
+      await executionAgent.grantRole(
+        await executionAgent.SUNSET_ROLE(),
+        await sunsetProtocol.getAddress()
+      );
     });
 
     it("Deploy IPToken", async function () {
@@ -382,13 +393,15 @@ describe("Gas Benchmarking", function () {
     });
 
     it("Resolve Ambiguity", async function () {
+      // resolveAmbiguity() is a view function, so there is no receipt to read;
+      // record the estimated execution cost instead.
       const corpusHash = ethers.keccak256(ethers.toUtf8Bytes("New Corpus"));
-      const tx = await lexiconHolder.resolveAmbiguity(
+      const gasUsed = await lexiconHolder.resolveAmbiguity.estimateGas(
         licensee.address,
         "keyword",
         corpusHash
       );
-      await logGas("6. Lexicon Operations", "resolveAmbiguity", tx);
+      logGasAmount("6. Lexicon Operations", "resolveAmbiguity (view, estimated)", gasUsed);
     });
 
     it("Create Cluster", async function () {

@@ -41,6 +41,15 @@ contract TriggerMechanismFuzzTest is Test {
         );
     }
 
+    /// @notice Drives the deadman switch through its commit-reveal flow.
+    /// [Audit fix: M-9] executeDeadmanSwitch() requires a commitment placed
+    /// COMMIT_REVEAL_DELAY blocks earlier by the same caller.
+    function _executeDeadmanSwitch(address _creator) internal {
+        triggerMechanism.commitDeadmanExecution(_creator);
+        vm.roll(block.number + triggerMechanism.COMMIT_REVEAL_DELAY());
+        triggerMechanism.executeDeadmanSwitch(_creator);
+    }
+
     /// @notice Fuzz test: Deadman interval must be at least 30 days
     function testFuzz_DeadmanIntervalMinimum(uint256 interval) public {
         if (interval < 30 days) {
@@ -101,13 +110,13 @@ contract TriggerMechanismFuzzTest is Test {
 
         if (timeElapsed < interval) {
             vm.expectRevert("Deadman interval not elapsed");
-            triggerMechanism.executeDeadmanSwitch(creator);
+            triggerMechanism.commitDeadmanExecution(creator);
 
             // Verify not triggered
             TriggerMechanism.TriggerConfig memory config = triggerMechanism.getTriggerConfig(creator);
             assertFalse(config.isTriggered, "Should not be triggered before interval elapses");
         } else {
-            triggerMechanism.executeDeadmanSwitch(creator);
+            _executeDeadmanSwitch(creator);
 
             // Verify triggered
             TriggerMechanism.TriggerConfig memory config = triggerMechanism.getTriggerConfig(creator);
@@ -126,14 +135,14 @@ contract TriggerMechanismFuzzTest is Test {
         triggerMechanism.configureDeadmanSwitch(30 days);
 
         vm.warp(block.timestamp + 30 days);
-        triggerMechanism.executeDeadmanSwitch(creator);
+        _executeDeadmanSwitch(creator);
 
         TriggerMechanism.TriggerConfig memory config = triggerMechanism.getTriggerConfig(creator);
         assertTrue(config.isTriggered, "Should be triggered");
 
         // Attempting to execute again should revert
         vm.expectRevert("Already triggered");
-        triggerMechanism.executeDeadmanSwitch(creator);
+        triggerMechanism.commitDeadmanExecution(creator);
 
         // Attempting to reconfigure should revert
         vm.prank(creator);
