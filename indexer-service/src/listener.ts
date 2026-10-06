@@ -4,7 +4,8 @@
  * The EventListener watches the chain for CorpusFrozen events, which are
  * emitted when a creator finalizes their intent corpus on-chain. On each
  * event it:
- *   1. Parses the event data into a CorpusEntry.
+ *   1. Reads the frozen corpus entry (storage URI, years) from the contract;
+ *      the event itself carries only the creator and corpus hash.
  *   2. Fetches the corpus from decentralized storage.
  *   3. Builds embeddings for the corpus chunks.
  *   4. Stores the indexed corpus in memory for resolution queries.
@@ -83,24 +84,28 @@ export class EventListener {
 
     await this.contract.on(
       "CorpusFrozen",
-      async (
-        creator: string,
-        corpusHash: string,
-        storageURI: string,
-        startYear: bigint,
-        endYear: bigint
-      ) => {
-        const entry: CorpusEntry = {
-          creator,
-          corpusHash,
-          storageURI,
-          startYear: Number(startYear),
-          endYear: Number(endYear),
-        };
+      async (creator: string, corpusHash: string) => {
+        let entry: CorpusEntry;
+        try {
+          const corpus = await this.contract.getCorpus(creator);
+          entry = {
+            creator,
+            corpusHash,
+            storageURI: corpus.storageURI,
+            startYear: Number(corpus.startYear),
+            endYear: Number(corpus.endYear),
+          };
+        } catch (err) {
+          console.error(
+            `[listener] Failed to read corpus for creator ${creator}:`,
+            err
+          );
+          return;
+        }
 
         console.log(
           `[listener] CorpusFrozen event: creator=${creator}, ` +
-            `hash=${corpusHash}, uri=${storageURI}, ` +
+            `hash=${corpusHash}, uri=${entry.storageURI}, ` +
             `years=${entry.startYear}-${entry.endYear}`
         );
 

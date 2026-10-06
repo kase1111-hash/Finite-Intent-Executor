@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Shield,
 } from 'lucide-react'
+import { sendTx } from '../utils/transactions'
 
 const IP_TYPES = [
   { value: 'article', label: 'Article/Paper', icon: FileText },
@@ -22,7 +23,7 @@ const IP_TYPES = [
 ]
 
 function IPTokens() {
-  const { account, contracts, isConnected } = useWeb3()
+  const { account, contracts, isConnected, refreshKey } = useWeb3()
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [tokens, setTokens] = useState([])
@@ -52,32 +53,22 @@ function IPTokens() {
 
     setLoading(true)
     try {
-      // For demo purposes, we'll fetch metadata for tokens we might own
-      // In production, you'd use events or an indexer
-      const tokenList = []
-
-      // Try to get total supply and check ownership
-      try {
-        const totalSupply = await contracts.IPToken.totalSupply()
-
-        for (let i = 0; i < Math.min(Number(totalSupply), 100); i++) {
-          try {
-            const owner = await contracts.IPToken.ownerOf(i)
-            if (owner.toLowerCase() === account.toLowerCase()) {
-              const metadata = await contracts.IPToken.getIPMetadata(i)
-              tokenList.push({
-                tokenId: i,
-                ...metadata,
-              })
-            }
-          } catch {
-            // Skip token if ownership check fails
-          }
+      const tokenIds = await contracts.IPToken.getCreatorTokens(account)
+      const tokenList = await Promise.all(tokenIds.map(async (id) => {
+        const [asset, licenses] = await Promise.all([
+          contracts.IPToken.getIPAsset(id),
+          contracts.IPToken.getLicenses(id),
+        ])
+        return {
+          tokenId: id.toString(),
+          title: asset.title,
+          description: asset.description,
+          ipType: asset.ipType,
+          licenseType: asset.licenseType,
+          isPublicDomain: asset.isPublicDomain,
+          licenseCount: licenses.length,
         }
-      } catch {
-        // Total supply fetch failed
-      }
-
+      }))
       setTokens(tokenList)
     } catch (err) {
       console.error('Failed to fetch tokens:', err)
@@ -88,7 +79,7 @@ function IPTokens() {
 
   useEffect(() => {
     fetchTokens()
-  }, [fetchTokens])
+  }, [fetchTokens, refreshKey])
 
   const handleMint = async (e) => {
     e.preventDefault()
@@ -99,10 +90,9 @@ function IPTokens() {
     }
 
     setSubmitting(true)
-    try {
-      const contentHash = ethers.keccak256(ethers.toUtf8Bytes(mintForm.content))
-
-      const tx = await contracts.IPToken.mintIP(
+    const contentHash = ethers.keccak256(ethers.toUtf8Bytes(mintForm.content))
+    const receipt = await sendTx(
+      contracts.IPToken.mintIP(
         account,
         mintForm.name,
         mintForm.description,
@@ -110,12 +100,12 @@ function IPTokens() {
         contentHash,
         mintForm.metadataUri || 'ipfs://',
         mintForm.license
-      )
+      ),
+      { id: 'mint', pending: 'Minting IP token...', success: 'IP token minted successfully!', failure: 'Failed to mint IP token' }
+    )
+    setSubmitting(false)
 
-      toast.loading('Minting IP token...', { id: 'mint' })
-      await tx.wait()
-      toast.success('IP token minted successfully!', { id: 'mint' })
-
+    if (receipt) {
       setShowMintForm(false)
       setMintForm({
         name: '',
@@ -126,11 +116,6 @@ function IPTokens() {
         license: 'MIT',
       })
       fetchTokens()
-    } catch (err) {
-      console.error('Failed to mint:', err)
-      toast.error('Failed to mint IP token. Please try again.')
-    } finally {
-      setSubmitting(false)
     }
   }
 
@@ -142,21 +127,28 @@ function IPTokens() {
       return
     }
 
-    setSubmitting(true)
-    try {
-      const durationSeconds = licenseForm.durationDays * 24 * 60 * 60
+    if (!(licenseForm.durationDays >= 1 && licenseForm.durationDays <= 20 * 365)) {
+      toast.error('Duration must be between 1 day and 20 years')
+      return
+    }
+    if (!(licenseForm.royaltyBps >= 0 && licenseForm.royaltyBps <= 10000)) {
+      toast.error('Royalty must be between 0% and 100%')
+      return
+    }
 
-      const tx = await contracts.IPToken.grantLicense(
+    setSubmitting(true)
+    const receipt = await sendTx(
+      contracts.IPToken.grantLicense(
         licenseForm.tokenId,
         licenseForm.licensee,
         licenseForm.royaltyBps,
-        durationSeconds
-      )
+        licenseForm.durationDays * 24 * 60 * 60
+      ),
+      { id: 'license', pending: 'Granting license...', success: 'License granted successfully!', failure: 'Failed to grant license' }
+    )
+    setSubmitting(false)
 
-      toast.loading('Granting license...', { id: 'license' })
-      await tx.wait()
-      toast.success('License granted successfully!', { id: 'license' })
-
+    if (receipt) {
       setShowLicenseForm(false)
       setLicenseForm({
         tokenId: '',
@@ -164,11 +156,7 @@ function IPTokens() {
         royaltyBps: 500,
         durationDays: 365,
       })
-    } catch (err) {
-      console.error('Failed to grant license:', err)
-      toast.error('Failed to grant license. Please try again.')
-    } finally {
-      setSubmitting(false)
+      fetchTokens()
     }
   }
 
@@ -232,7 +220,7 @@ function IPTokens() {
                     <span className="badge-info">#{token.tokenId}</span>
                   </div>
 
-                  <h3 className="font-semibold text-gray-900 mt-4">{token.name}</h3>
+                  <h3 className="font-semibold text-gray-900 mt-4">{token.title}</h3>
                   <p className="text-sm text-gray-600 mt-1 line-clamp-2">{token.description}</p>
 
                   <div className="mt-4 space-y-2 text-sm">
@@ -242,7 +230,11 @@ function IPTokens() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-gray-500">License</span>
-                      <span className="font-mono">{token.license}</span>
+                      <span className="font-mono">{token.licenseType}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">Licenses granted</span>
+                      <span>{token.licenseCount}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-gray-500">Status</span>
@@ -254,17 +246,19 @@ function IPTokens() {
                     </div>
                   </div>
 
-                  <div className="mt-4 pt-4 border-t border-gray-100 flex gap-2">
-                    <button
-                      onClick={() => {
-                        setLicenseForm(prev => ({ ...prev, tokenId: token.tokenId }))
-                        setShowLicenseForm(true)
-                      }}
-                      className="btn-secondary text-sm flex-1"
-                    >
-                      Grant License
-                    </button>
-                  </div>
+                  {!token.isPublicDomain && (
+                    <div className="mt-4 pt-4 border-t border-gray-100 flex gap-2">
+                      <button
+                        onClick={() => {
+                          setLicenseForm(prev => ({ ...prev, tokenId: token.tokenId }))
+                          setShowLicenseForm(true)
+                        }}
+                        className="btn-secondary text-sm flex-1"
+                      >
+                        Grant License
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )
@@ -293,7 +287,9 @@ function IPTokens() {
           <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Mint IP Token</h2>
-              <p className="text-sm text-gray-600 mt-1">Create an ERC721 token for your IP</p>
+              <p className="text-sm text-gray-600 mt-1">
+                Create an ERC721 token for your IP. Requires MINTER_ROLE on the IPToken contract.
+              </p>
             </div>
 
             <form onSubmit={handleMint} className="p-6 space-y-4">
@@ -422,7 +418,8 @@ function IPTokens() {
             <div className="p-6 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Grant License</h2>
               <p className="text-sm text-gray-600 mt-1">
-                Grant usage rights for Token #{licenseForm.tokenId}
+                Grant usage rights for Token #{licenseForm.tokenId}. Requires EXECUTOR_ROLE on
+                the IPToken contract.
               </p>
             </div>
 

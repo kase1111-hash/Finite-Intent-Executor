@@ -45,5 +45,5 @@ frontend/src/contracts/deployedAddresses.js
 
 # Foundry
 foundry-out/
-lib/
+/lib/
 cache_forge/

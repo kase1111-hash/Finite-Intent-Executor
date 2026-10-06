@@ -2,8 +2,8 @@
 
 [![Version](https://img.shields.io/badge/Version-0.1.0--alpha-orange.svg)](https://github.com/kase1111-hash/Finite-Intent-Executor/releases)
 [![License: CC0-1.0](https://img.shields.io/badge/License-CC0_1.0-lightgrey.svg)](https://creativecommons.org/publicdomain/zero/1.0/)
-[![Solidity](https://img.shields.io/badge/Solidity-0.8.26-blue.svg)](https://soliditylang.org/)
-[![Hardhat](https://img.shields.io/badge/Hardhat-2.22.0-yellow.svg)](https://hardhat.org/)
+[![Solidity](https://img.shields.io/badge/Solidity-0.8.28-blue.svg)](https://soliditylang.org/)
+[![Hardhat](https://img.shields.io/badge/Hardhat-3-yellow.svg)](https://hardhat.org/)
 [![OpenZeppelin](https://img.shields.io/badge/OpenZeppelin-5.4.0-blue.svg)](https://openzeppelin.com/)
 [![Tests](https://img.shields.io/badge/Tests-Passing-green.svg)](./test)
 
@@ -56,25 +56,57 @@ npm test test/E2ERealisticScenario.test.js
 
 ## Quick Start
 
-```bash
-# Install dependencies
-npm install
-
-# Compile contracts
-npm run compile
-
-# Run tests
-npm test
-
-# Deploy to local network
-npm run node          # Terminal 1
-npm run deploy        # Terminal 2
-```
-
 ### Prerequisites
 
-- **Node.js 18+** - [Download](https://nodejs.org)
-- **Git** (optional) - For version control
+- **Node.js 20+** - [Download](https://nodejs.org)
+- No wallet needed for local development (MetaMask is optional)
+
+### Build and test
+
+```bash
+npm install          # Install dependencies
+npm run compile      # Compile contracts
+npm test             # Run the test suite
+```
+
+### Run the whole system locally
+
+```bash
+# Terminal 1: start a local chain (keep it running)
+npm run node
+
+# Terminal 2: deploy the contracts to it, then start the dashboard
+npm run deploy
+cd frontend
+npm install
+npm run dev
+```
+
+Open http://localhost:3000 and click **Use Local Dev Account**. This connects
+to the local chain's pre-funded account #0, which holds every operator role,
+so every page works without installing a wallet. `npm run deploy` writes the
+contract addresses where the dashboard finds them automatically.
+
+You can then walk through the full lifecycle in the dashboard:
+
+1. **Intent Capture**: describe your intent and corpus, then capture it.
+2. **Triggers**: configure a deadman switch (30+ days).
+3. Use **Local chain tools** in the sidebar to jump ahead **+31 days**.
+4. Switch the **Local account** dropdown to #1, open **Triggers**, enter
+   account #0's address under *Act on Another Creator's Trigger*, then
+   commit, **Mine 2 blocks**, and execute the deadman switch.
+5. Switch back to #0. **Execution**: activate execution.
+   **Lexicon**: freeze the corpus and create a semantic index (for example
+   keyword `fund_digital_rights`, score 97).
+6. **Execution**: run an action. It executes at 95%+ confidence and otherwise
+   defaults to inaction; political actions are always blocked.
+7. Jump **+20 years**, then run the **Sunset** steps through to completion.
+
+To use MetaMask instead, add the network `http://127.0.0.1:8545` (chain ID
+31337) and import account #0's private key from the `npm run node` output.
+
+If a page says contracts are not available, the local chain was restarted
+since the last deploy: run `npm run deploy` again and reload.
 
 ## Features
 
@@ -193,15 +225,15 @@ See [SECURITY.md](SECURITY.md) for detailed audit findings and [ARCHITECTURE.md]
 ## Technology Stack
 
 ### Smart Contracts
-- **Solidity ^0.8.20** - Smart contract language (compiled with 0.8.26 via Hardhat)
-- **Hardhat 2.22.0** - Development framework with SMTChecker
+- **Solidity ^0.8.20** - Smart contract language (compiled with 0.8.28 via Hardhat)
+- **Hardhat 3** - Development framework
 - **OpenZeppelin 5.4.0** - Security-audited contract libraries
 
 ### Frontend Dashboard
 - **React 19.0.0** - UI framework
 - **Vite 6.2.0** - Build tool with code splitting
 - **ethers.js 6.16.0** - Ethereum interaction
-- **Tailwind CSS 3.3.6** - Styling
+- **Tailwind CSS 4** - Styling
 
 ### Testing & Verification
 - **Hardhat Test** - Unit and integration tests
@@ -219,9 +251,10 @@ Run the comprehensive test suite:
 npm test
 
 # Gas benchmarking
-npx hardhat test test/GasBenchmark.test.js
+npm run test:gas
 
-# Fuzzing tests (requires Foundry)
+# Fuzzing tests (requires Foundry; install forge-std once first)
+forge install foundry-rs/forge-std
 forge test --fuzz-runs 1000
 
 # Formal verification (requires Certora)
@@ -229,7 +262,7 @@ forge test --fuzz-runs 1000
 ```
 
 ### Test Coverage
-- **11 test files** covering all core contracts
+- **13 test files** covering all core contracts, the deployment wiring, and the dashboard's ABIs
 - **Unit tests** for individual contract functions
 - **Integration tests** for complete workflows (including E2E realistic scenario)
 - **Gas benchmarks** for cost optimization
@@ -240,8 +273,10 @@ forge test --fuzz-runs 1000
 1. Fork the repository
 2. Create a feature branch
 3. Write tests for new functionality
-4. Ensure all tests pass (`npm test`)
-5. Submit a pull request
+4. If you changed a contract's external interface, run `npm run export-abis` to
+   regenerate the dashboard's ABIs (a test fails until you do)
+5. Ensure all tests pass (`npm test`)
+6. Submit a pull request
 
 ## License
 
@@ -253,4 +288,4 @@ FIE is part of the [NatLangChain ecosystem](https://github.com/kase1111-hash). S
 
 ---
 
-**Version:** 0.1.0-alpha | **Last Updated:** 2026-02-12
+**Version:** 0.1.0-alpha | **Last Updated:** 2026-10-06

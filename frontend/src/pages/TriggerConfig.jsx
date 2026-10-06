@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useWeb3 } from '../context/Web3Context'
-import { TRIGGER_TYPES } from '../contracts/config'
+import { TRIGGER_TYPES, TRIGGER_TYPE } from '../contracts/config'
 import { ethers } from 'ethers'
 import toast from 'react-hot-toast'
 import {
@@ -14,35 +14,254 @@ import {
   Plus,
   Trash2,
   Play,
+  Search,
+  Info,
 } from 'lucide-react'
-import { formatDistanceToNow, format } from 'date-fns'
+import { formatDistance, format } from 'date-fns'
+import { getErrorMessage } from '../utils/errors'
+import { sendTx } from '../utils/transactions'
+
+// IOracle.EventType
+const ORACLE_EVENT_TYPES = ['Death', 'Incapacitation', 'Legal Event', 'Custom']
+
+const DAY = 24 * 60 * 60
+
+/** Reads everything needed to act on `creator`'s trigger as `account`. */
+async function fetchTriggerLookup(trigger, provider, account, creator) {
+  try {
+    const [config, signatures, hasSigned, commitBlock, delay, block] = await Promise.all([
+      trigger.getTriggerConfig(creator),
+      trigger.signatureCount(creator),
+      trigger.hasSignedTrigger(creator, account),
+      trigger.deadmanCommitBlocks(creator, account),
+      trigger.COMMIT_REVEAL_DELAY(),
+      provider.getBlock('latest'),
+    ])
+    return {
+      config,
+      signatures: Number(signatures),
+      hasSigned,
+      commitBlock: Number(commitBlock),
+      revealBlock: Number(commitBlock) + Number(delay),
+      blockNumber: block.number,
+      now: block.timestamp,
+    }
+  } catch (err) {
+    toast.error(`Failed to load trigger: ${getErrorMessage(err)}`)
+    return null
+  }
+}
+
+/**
+ * Lets a third party act on someone else's trigger: a trusted signer submits
+ * their signature, or anyone fires an overdue deadman switch (commit, wait
+ * COMMIT_REVEAL_DELAY blocks, then execute).
+ */
+function CreatorTriggerActions() {
+  const { account, contracts, provider, refreshKey } = useWeb3()
+  const [creator, setCreator] = useState('')
+  const [loadedCreator, setLoadedCreator] = useState(null)
+  const [lookup, setLookup] = useState(null)
+  const [reloadCount, setReloadCount] = useState(0)
+  const [submitting, setSubmitting] = useState(false)
+
+  const reload = () => setReloadCount((n) => n + 1)
+
+  useEffect(() => {
+    if (!contracts.TriggerMechanism || !provider || !loadedCreator) return
+    let cancelled = false
+    fetchTriggerLookup(contracts.TriggerMechanism, provider, account, loadedCreator)
+      .then((result) => { if (!cancelled) setLookup(result) })
+    return () => { cancelled = true }
+  }, [account, contracts, provider, loadedCreator, refreshKey, reloadCount])
+
+  const handleLoad = (e) => {
+    e.preventDefault()
+    if (!ethers.isAddress(creator)) {
+      toast.error('Enter a valid creator address')
+      return
+    }
+    setLoadedCreator(ethers.getAddress(creator))
+  }
+
+  const act = async (txFn, toastOptions) => {
+    setSubmitting(true)
+    await sendTx(txFn(), toastOptions)
+    setSubmitting(false)
+    reload()
+  }
+
+  const config = lookup?.config
+  const type = config?.isConfigured ? Number(config.triggerType) : null
+  const now = lookup?.now
+  const dueAt = type === TRIGGER_TYPE.DEADMAN_SWITCH
+    ? Number(config.lastCheckIn) + Number(config.deadmanInterval)
+    : null
+  const isSigner = type === TRIGGER_TYPE.TRUSTED_QUORUM &&
+    config.trustedSigners.some(s => s.toLowerCase() === account?.toLowerCase())
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+          <Users size={20} />
+          Act on Another Creator&apos;s Trigger
+        </h2>
+        <p className="text-sm text-gray-600 mt-1">
+          For trusted signers submitting a quorum signature, or anyone executing an overdue
+          deadman switch.
+        </p>
+      </div>
+      <div className="card-body space-y-4">
+        <form onSubmit={handleLoad} className="flex gap-2">
+          <input
+            type="text"
+            value={creator}
+            onChange={(e) => setCreator(e.target.value.trim())}
+            placeholder="Creator address 0x..."
+            className={`input flex-1 font-mono ${creator && !ethers.isAddress(creator) ? 'input-error' : ''}`}
+            aria-label="Creator address"
+          />
+          <button type="submit" className="btn-secondary flex items-center gap-2">
+            <Search size={18} />
+            Load
+          </button>
+        </form>
+
+        {lookup && !config.isConfigured && (
+          <p className="text-sm text-gray-600">This creator has not configured a trigger.</p>
+        )}
+
+        {lookup && config.isConfigured && (
+          <div className="p-4 bg-gray-50 rounded-lg space-y-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-gray-900">{TRIGGER_TYPES[type]}</span>
+              {config.isTriggered
+                ? <span className="badge-danger">Triggered</span>
+                : <span className="badge-success">Armed</span>}
+            </div>
+
+            {!config.isTriggered && type === TRIGGER_TYPE.TRUSTED_QUORUM && (
+              <>
+                <p>Signatures: {lookup.signatures} / {Number(config.requiredSignatures)} required</p>
+                {!isSigner ? (
+                  <p className="text-gray-600">Your account is not one of this creator&apos;s trusted signers.</p>
+                ) : lookup.hasSigned ? (
+                  <p className="text-green-700">You have already signed.</p>
+                ) : (
+                  <button
+                    onClick={() => act(
+                      () => contracts.TriggerMechanism.submitTrustedSignature(loadedCreator),
+                      { id: 'sig', pending: 'Submitting signature...', success: 'Signature submitted!', failure: 'Failed to submit signature' }
+                    )}
+                    disabled={submitting}
+                    className="btn-primary flex items-center gap-2"
+                  >
+                    <Play size={18} />
+                    Submit My Signature
+                  </button>
+                )}
+              </>
+            )}
+
+            {!config.isTriggered && type === TRIGGER_TYPE.DEADMAN_SWITCH && (
+              <>
+                <p>
+                  Fires {now >= dueAt ? 'now (overdue since ' : 'at '}
+                  {format(new Date(dueAt * 1000), 'PPpp')}{now >= dueAt ? ')' : ''}
+                </p>
+                {now < dueAt ? (
+                  <p className="text-gray-600">
+                    The creator is still within their check-in window
+                    ({formatDistance(new Date(dueAt * 1000), new Date(now * 1000))} left).
+                  </p>
+                ) : lookup.commitBlock === 0 ? (
+                  <>
+                    <p className="text-gray-600">
+                      Step 1 of 2: commit to executing. The execution itself is allowed a few
+                      blocks later (front-running protection).
+                    </p>
+                    <button
+                      onClick={() => act(
+                        () => contracts.TriggerMechanism.commitDeadmanExecution(loadedCreator),
+                        { id: 'commit', pending: 'Committing...', success: 'Committed. Execute after the delay.', failure: 'Failed to commit' }
+                      )}
+                      disabled={submitting}
+                      className="btn-primary flex items-center gap-2"
+                    >
+                      <Play size={18} />
+                      Commit to Execute
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-gray-600">
+                      Step 2 of 2: committed at block {lookup.commitBlock}. Execution is allowed
+                      from block {lookup.revealBlock} (current block {lookup.blockNumber}).
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => act(
+                          () => contracts.TriggerMechanism.executeDeadmanSwitch(loadedCreator),
+                          { id: 'execute', pending: 'Executing deadman switch...', success: 'Deadman switch executed. Intent triggered.', failure: 'Failed to execute' }
+                        )}
+                        disabled={submitting || lookup.blockNumber < lookup.revealBlock}
+                        className="btn-danger flex items-center gap-2"
+                      >
+                        <Zap size={18} />
+                        Execute Deadman Switch
+                      </button>
+                      <button onClick={reload} className="btn-secondary flex items-center gap-2">
+                        <RefreshCw size={18} />
+                        Check Block
+                      </button>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+
+            {!config.isTriggered && type === TRIGGER_TYPE.ORACLE_VERIFIED && (
+              <p className="text-gray-600">
+                Oracle triggers fire through oracle verification (OracleRegistry or ZK proof),
+                not from this dashboard.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function TriggerConfig() {
-  const { account, contracts, isConnected } = useWeb3()
+  const { account, contracts, isConnected, chainNow, refreshKey } = useWeb3()
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [triggerConfig, setTriggerConfig] = useState(null)
   const [signatureCount, setSignatureCount] = useState(0)
+  const [hasOracleRegistry, setHasOracleRegistry] = useState(false)
 
   // Form state
-  const [selectedType, setSelectedType] = useState(1) // Deadman switch default
+  const [selectedType, setSelectedType] = useState(TRIGGER_TYPE.DEADMAN_SWITCH)
   const [deadmanTimeout, setDeadmanTimeout] = useState(90) // days
   const [trustedSigners, setTrustedSigners] = useState(['', ''])
   const [requiredSignatures, setRequiredSignatures] = useState(2)
-  const [oracleAddresses, setOracleAddresses] = useState([''])
+  const [oracleForm, setOracleForm] = useState({ eventType: 0, evidence: '', requiredOracles: 0 })
 
   const fetchTriggerConfig = useCallback(async () => {
     if (!isConnected || !account || !contracts.TriggerMechanism) return
 
     setLoading(true)
     try {
-      const config = await contracts.TriggerMechanism.getTriggerConfig(account)
+      const [config, count, registry] = await Promise.all([
+        contracts.TriggerMechanism.getTriggerConfig(account),
+        contracts.TriggerMechanism.signatureCount(account),
+        contracts.TriggerMechanism.oracleRegistry(),
+      ])
       setTriggerConfig(config)
-
-      if (config.triggerType === 2) {
-        const count = await contracts.TriggerMechanism.getSignatureCount(account)
-        setSignatureCount(Number(count))
-      }
+      setSignatureCount(Number(count))
+      setHasOracleRegistry(registry !== ethers.ZeroAddress)
     } catch (err) {
       console.error('Failed to fetch trigger config:', err)
     } finally {
@@ -52,116 +271,72 @@ function TriggerConfig() {
 
   useEffect(() => {
     fetchTriggerConfig()
-  }, [fetchTriggerConfig])
+  }, [fetchTriggerConfig, refreshKey])
 
-  const handleConfigureDeadman = async (e) => {
+  const submit = async (txFn, toastOptions) => {
+    setSubmitting(true)
+    const receipt = await sendTx(txFn(), toastOptions)
+    setSubmitting(false)
+    if (receipt) fetchTriggerConfig()
+  }
+
+  const handleConfigureDeadman = (e) => {
     e.preventDefault()
-    if (deadmanTimeout < 30) {
+    if (!(deadmanTimeout >= 30)) {
       toast.error('Minimum timeout is 30 days')
       return
     }
-
-    setSubmitting(true)
-    try {
-      const timeoutSeconds = deadmanTimeout * 24 * 60 * 60
-      const tx = await contracts.TriggerMechanism.configureDeadmanSwitch(timeoutSeconds)
-      toast.loading('Configuring deadman switch...', { id: 'config' })
-      await tx.wait()
-      toast.success('Deadman switch configured!', { id: 'config' })
-      fetchTriggerConfig()
-    } catch (err) {
-      console.error('Failed to configure:', err)
-      toast.error('Failed to configure deadman switch. Please try again.')
-    } finally {
-      setSubmitting(false)
-    }
+    submit(
+      () => contracts.TriggerMechanism.configureDeadmanSwitch(deadmanTimeout * DAY),
+      { id: 'config', pending: 'Configuring deadman switch...', success: 'Deadman switch configured!', failure: 'Failed to configure deadman switch' }
+    )
   }
 
-  const handleConfigureQuorum = async (e) => {
+  const handleConfigureQuorum = (e) => {
     e.preventDefault()
 
-    const validSigners = trustedSigners.filter(addr => addr.trim() && ethers.isAddress(addr))
-    if (validSigners.length < 2) {
+    const filledSigners = trustedSigners.filter(addr => addr.trim())
+    const invalid = filledSigners.find(addr => !ethers.isAddress(addr))
+    if (invalid) {
+      toast.error(`Invalid address: ${invalid}`)
+      return
+    }
+    if (filledSigners.length < 2) {
       toast.error('At least 2 trusted signers required')
       return
     }
-    if (requiredSignatures < 2 || requiredSignatures > validSigners.length) {
-      toast.error(`Required signatures must be between 2 and ${validSigners.length}`)
+    if (!(requiredSignatures >= 2 && requiredSignatures <= filledSigners.length)) {
+      toast.error(`Required signatures must be between 2 and ${filledSigners.length}`)
       return
     }
 
-    setSubmitting(true)
-    try {
-      const tx = await contracts.TriggerMechanism.configureTrustedQuorum(
-        validSigners,
-        requiredSignatures
-      )
-      toast.loading('Configuring trusted quorum...', { id: 'config' })
-      await tx.wait()
-      toast.success('Trusted quorum configured!', { id: 'config' })
-      fetchTriggerConfig()
-    } catch (err) {
-      console.error('Failed to configure:', err)
-      toast.error('Failed to configure trusted quorum. Please try again.')
-    } finally {
-      setSubmitting(false)
-    }
+    submit(
+      () => contracts.TriggerMechanism.configureTrustedQuorum(filledSigners, requiredSignatures),
+      { id: 'config', pending: 'Configuring trusted quorum...', success: 'Trusted quorum configured!', failure: 'Failed to configure trusted quorum' }
+    )
   }
 
-  const handleConfigureOracle = async (e) => {
+  const handleConfigureOracle = (e) => {
     e.preventDefault()
-
-    const validOracles = oracleAddresses.filter(addr => addr.trim() && ethers.isAddress(addr))
-    if (validOracles.length === 0) {
-      toast.error('At least one oracle address required')
+    if (!oracleForm.evidence.trim()) {
+      toast.error('Describe the verification data to commit to')
       return
     }
-
-    setSubmitting(true)
-    try {
-      const tx = await contracts.TriggerMechanism.configureOracleVerified(validOracles)
-      toast.loading('Configuring oracle verification...', { id: 'config' })
-      await tx.wait()
-      toast.success('Oracle verification configured!', { id: 'config' })
-      fetchTriggerConfig()
-    } catch (err) {
-      console.error('Failed to configure:', err)
-      toast.error('Failed to configure oracle verification. Please try again.')
-    } finally {
-      setSubmitting(false)
-    }
+    submit(
+      () => contracts.TriggerMechanism.configureEnhancedOracleVerified(
+        oracleForm.eventType,
+        ethers.keccak256(ethers.toUtf8Bytes(oracleForm.evidence)),
+        oracleForm.requiredOracles
+      ),
+      { id: 'config', pending: 'Configuring oracle verification...', success: 'Oracle verification configured!', failure: 'Failed to configure oracle verification' }
+    )
   }
 
-  const handleCheckIn = async () => {
-    setSubmitting(true)
-    try {
-      const tx = await contracts.TriggerMechanism.checkIn()
-      toast.loading('Checking in...', { id: 'checkin' })
-      await tx.wait()
-      toast.success('Check-in successful! Timer reset.', { id: 'checkin' })
-      fetchTriggerConfig()
-    } catch (err) {
-      console.error('Failed to check in:', err)
-      toast.error('Failed to check in. Please try again.')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const handleSubmitSignature = async () => {
-    setSubmitting(true)
-    try {
-      const tx = await contracts.TriggerMechanism.submitTrustedSignature()
-      toast.loading('Submitting signature...', { id: 'sig' })
-      await tx.wait()
-      toast.success('Signature submitted!', { id: 'sig' })
-      fetchTriggerConfig()
-    } catch (err) {
-      console.error('Failed to submit signature:', err)
-      toast.error('Failed to submit signature. Please try again.')
-    } finally {
-      setSubmitting(false)
-    }
+  const handleCheckIn = () => {
+    submit(
+      () => contracts.TriggerMechanism.checkIn(),
+      { id: 'checkin', pending: 'Checking in...', success: 'Check-in successful! Timer reset.', failure: 'Failed to check in' }
+    )
   }
 
   const addSignerField = () => {
@@ -176,24 +351,8 @@ function TriggerConfig() {
 
   const updateSignerField = (index, value) => {
     const newSigners = [...trustedSigners]
-    newSigners[index] = value
+    newSigners[index] = value.trim()
     setTrustedSigners(newSigners)
-  }
-
-  const addOracleField = () => {
-    setOracleAddresses([...oracleAddresses, ''])
-  }
-
-  const removeOracleField = (index) => {
-    if (oracleAddresses.length > 1) {
-      setOracleAddresses(oracleAddresses.filter((_, i) => i !== index))
-    }
-  }
-
-  const updateOracleField = (index, value) => {
-    const newOracles = [...oracleAddresses]
-    newOracles[index] = value
-    setOracleAddresses(newOracles)
   }
 
   if (!isConnected) {
@@ -206,7 +365,7 @@ function TriggerConfig() {
     )
   }
 
-  if (loading) {
+  if (loading && !triggerConfig) {
     return (
       <div className="flex items-center justify-center py-20">
         <RefreshCw size={32} className="animate-spin text-primary-600" />
@@ -214,17 +373,19 @@ function TriggerConfig() {
     )
   }
 
-  const hasConfig = triggerConfig && triggerConfig.triggerType > 0
+  const hasConfig = triggerConfig?.isConfigured
+  const configuredType = hasConfig ? Number(triggerConfig.triggerType) : null
   const isTriggered = triggerConfig?.isTriggered
 
-  // Calculate time until trigger for deadman switch
+  // Calculate time until trigger for deadman switch (in chain time)
   let timeUntilTrigger = null
   let triggerDate = null
-  if (triggerConfig?.triggerType === 1 && triggerConfig.lastCheckIn > 0) {
-    const lastCheckIn = new Date(Number(triggerConfig.lastCheckIn) * 1000)
-    const timeout = Number(triggerConfig.deadmanTimeout) * 1000
-    triggerDate = new Date(lastCheckIn.getTime() + timeout)
-    timeUntilTrigger = triggerDate > new Date() ? formatDistanceToNow(triggerDate) : 'Overdue'
+  if (configuredType === TRIGGER_TYPE.DEADMAN_SWITCH) {
+    triggerDate = new Date((Number(triggerConfig.lastCheckIn) + Number(triggerConfig.deadmanInterval)) * 1000)
+    if (chainNow !== null) {
+      const now = new Date(chainNow * 1000)
+      timeUntilTrigger = triggerDate > now ? formatDistance(triggerDate, now) : 'Overdue'
+    }
   }
 
   return (
@@ -257,7 +418,7 @@ function TriggerConfig() {
                 )}
                 <div>
                   <h3 className="font-semibold text-gray-900">
-                    {TRIGGER_TYPES[triggerConfig.triggerType]}
+                    {TRIGGER_TYPES[configuredType]}
                   </h3>
                   <p className="text-sm text-gray-600">
                     {isTriggered ? 'Trigger has been activated' : 'Configured and active'}
@@ -266,7 +427,7 @@ function TriggerConfig() {
               </div>
 
               {/* Deadman switch check-in button */}
-              {triggerConfig.triggerType === 1 && !isTriggered && (
+              {configuredType === TRIGGER_TYPE.DEADMAN_SWITCH && !isTriggered && (
                 <button
                   onClick={handleCheckIn}
                   disabled={submitting}
@@ -279,21 +440,19 @@ function TriggerConfig() {
             </div>
 
             {/* Type-specific info */}
-            {triggerConfig.triggerType === 1 && !isTriggered && (
+            {configuredType === TRIGGER_TYPE.DEADMAN_SWITCH && !isTriggered && (
               <div className="mt-4 p-4 bg-white rounded-lg">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="text-gray-500">Last Check-in:</span>
                     <p className="font-medium">
-                      {triggerConfig.lastCheckIn > 0
-                        ? format(new Date(Number(triggerConfig.lastCheckIn) * 1000), 'PPpp')
-                        : 'Never'}
+                      {format(new Date(Number(triggerConfig.lastCheckIn) * 1000), 'PPpp')}
                     </p>
                   </div>
                   <div>
                     <span className="text-gray-500">Timeout:</span>
                     <p className="font-medium">
-                      {Math.round(Number(triggerConfig.deadmanTimeout) / 86400)} days
+                      {Math.round(Number(triggerConfig.deadmanInterval) / DAY)} days
                     </p>
                   </div>
                   <div>
@@ -304,13 +463,13 @@ function TriggerConfig() {
                   </div>
                   <div>
                     <span className="text-gray-500">Time Remaining:</span>
-                    <p className="font-medium text-sunset-600">{timeUntilTrigger}</p>
+                    <p className="font-medium text-sunset-600">{timeUntilTrigger ?? '…'}</p>
                   </div>
                 </div>
               </div>
             )}
 
-            {triggerConfig.triggerType === 2 && (
+            {configuredType === TRIGGER_TYPE.TRUSTED_QUORUM && (
               <div className="mt-4 p-4 bg-white rounded-lg">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-gray-500">Signatures:</span>
@@ -322,28 +481,20 @@ function TriggerConfig() {
                   <div
                     className="bg-primary-600 h-2 rounded-full transition-all"
                     style={{
-                      width: `${(signatureCount / Number(triggerConfig.requiredSignatures)) * 100}%`
+                      width: `${Math.min(100, (signatureCount / Number(triggerConfig.requiredSignatures)) * 100)}%`
                     }}
                   />
                 </div>
-                <div className="mt-4">
-                  <button
-                    onClick={handleSubmitSignature}
-                    disabled={submitting}
-                    className="btn-primary flex items-center gap-2"
-                  >
-                    <Play size={18} />
-                    Submit My Signature
-                  </button>
+                <div className="mt-4 text-sm">
+                  <span className="text-gray-500">Trusted signers:</span>
+                  <ul className="font-mono mt-1 space-y-1 break-all">
+                    {triggerConfig.trustedSigners.map(signer => <li key={signer}>{signer}</li>)}
+                  </ul>
+                  <p className="text-gray-500 mt-2">
+                    Each signer submits their signature from their own account, using
+                    &quot;Act on Another Creator&apos;s Trigger&quot; below with your address.
+                  </p>
                 </div>
-              </div>
-            )}
-
-            {isTriggered && (
-              <div className="mt-4 p-4 bg-white rounded-lg">
-                <p className="text-sm text-gray-600">
-                  Triggered at: {format(new Date(Number(triggerConfig.triggeredAt) * 1000), 'PPpp')}
-                </p>
               </div>
             )}
           </div>
@@ -353,11 +504,16 @@ function TriggerConfig() {
       {/* Configuration Forms */}
       {!isTriggered && (
         <div className="space-y-6">
+          {hasConfig && (
+            <p className="text-sm text-gray-600">
+              You can replace your trigger configuration until it fires.
+            </p>
+          )}
           <div className="flex gap-2">
             {[
-              { type: 1, label: 'Deadman Switch', icon: Clock },
-              { type: 2, label: 'Trusted Quorum', icon: Users },
-              { type: 3, label: 'Oracle Verified', icon: Radio },
+              { type: TRIGGER_TYPE.DEADMAN_SWITCH, label: 'Deadman Switch', icon: Clock },
+              { type: TRIGGER_TYPE.TRUSTED_QUORUM, label: 'Trusted Quorum', icon: Users },
+              { type: TRIGGER_TYPE.ORACLE_VERIFIED, label: 'Oracle Verified', icon: Radio },
             ].map(({ type, label, icon: Icon }) => (
               <button
                 key={type}
@@ -377,7 +533,7 @@ function TriggerConfig() {
           </div>
 
           {/* Deadman Switch Form */}
-          {selectedType === 1 && (
+          {selectedType === TRIGGER_TYPE.DEADMAN_SWITCH && (
             <form onSubmit={handleConfigureDeadman} className="card">
               <div className="card-header">
                 <h2 className="font-semibold text-gray-900 flex items-center gap-2">
@@ -387,21 +543,21 @@ function TriggerConfig() {
               </div>
               <div className="card-body space-y-4">
                 <p className="text-sm text-gray-600">
-                  If you do not check in within the timeout period, the trigger will activate.
+                  If you do not check in within the timeout period, anyone can fire the trigger.
                   Minimum timeout is 30 days.
                 </p>
                 <div>
-                  <label className="label">Timeout (days)</label>
+                  <label className="label" htmlFor="deadman-timeout">Timeout (days)</label>
                   <input
+                    id="deadman-timeout"
                     type="number"
-                    value={deadmanTimeout}
+                    value={Number.isNaN(deadmanTimeout) ? '' : deadmanTimeout}
                     onChange={(e) => setDeadmanTimeout(parseInt(e.target.value))}
                     min="30"
-                    max="365"
                     className="input"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Trigger will activate if no check-in for {deadmanTimeout} days
+                    Trigger will activate if no check-in for {deadmanTimeout || '?'} days
                   </p>
                 </div>
                 <button
@@ -417,7 +573,7 @@ function TriggerConfig() {
           )}
 
           {/* Trusted Quorum Form */}
-          {selectedType === 2 && (
+          {selectedType === TRIGGER_TYPE.TRUSTED_QUORUM && (
             <form onSubmit={handleConfigureQuorum} className="card">
               <div className="card-header">
                 <h2 className="font-semibold text-gray-900 flex items-center gap-2">
@@ -451,6 +607,7 @@ function TriggerConfig() {
                           value={addr}
                           onChange={(e) => updateSignerField(index, e.target.value)}
                           placeholder="0x..."
+                          aria-label={`Trusted signer ${index + 1}`}
                           className={`input flex-1 font-mono ${
                             addr && !ethers.isAddress(addr) ? 'input-error' : ''
                           }`}
@@ -470,10 +627,11 @@ function TriggerConfig() {
                 </div>
 
                 <div>
-                  <label className="label">Required Signatures</label>
+                  <label className="label" htmlFor="required-signatures">Required Signatures</label>
                   <input
+                    id="required-signatures"
                     type="number"
-                    value={requiredSignatures}
+                    value={Number.isNaN(requiredSignatures) ? '' : requiredSignatures}
                     onChange={(e) => setRequiredSignatures(parseInt(e.target.value))}
                     min="2"
                     max={trustedSigners.filter(a => a.trim()).length || 2}
@@ -494,8 +652,8 @@ function TriggerConfig() {
           )}
 
           {/* Oracle Verified Form */}
-          {selectedType === 3 && (
-            <form onSubmit={handleConfigureOracle} className="card">
+          {selectedType === TRIGGER_TYPE.ORACLE_VERIFIED && (
+            <div className="card">
               <div className="card-header">
                 <h2 className="font-semibold text-gray-900 flex items-center gap-2">
                   <Radio size={20} />
@@ -504,61 +662,76 @@ function TriggerConfig() {
               </div>
               <div className="card-body space-y-4">
                 <p className="text-sm text-gray-600">
-                  Use verified oracles (Chainlink, UMA) to verify events like death certificates,
-                  medical incapacitation, or legal events.
+                  Use a consensus of verified oracles (Chainlink, UMA) through the OracleRegistry to
+                  verify an event such as a death certificate, medical incapacitation, or a legal event.
                 </p>
-
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="label mb-0">Oracle Addresses</label>
+                {!hasOracleRegistry ? (
+                  <div className="flex gap-3 p-4 bg-gray-50 rounded-lg text-sm text-gray-700">
+                    <Info size={20} className="text-gray-500 shrink-0" />
+                    <p>
+                      Not available on this deployment: no OracleRegistry is connected to the
+                      TriggerMechanism. The contract owner must deploy one and call
+                      {' '}<code className="font-mono">setOracleRegistry</code> first. (Direct
+                      single-oracle proofs are disabled for safety.) Use a deadman switch or
+                      trusted quorum instead.
+                    </p>
+                  </div>
+                ) : (
+                  <form onSubmit={handleConfigureOracle} className="space-y-4">
+                    <div>
+                      <label className="label" htmlFor="oracle-event">Event to verify</label>
+                      <select
+                        id="oracle-event"
+                        className="input"
+                        value={oracleForm.eventType}
+                        onChange={(e) => setOracleForm(prev => ({ ...prev, eventType: Number(e.target.value) }))}
+                      >
+                        {ORACLE_EVENT_TYPES.map((label, value) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label" htmlFor="oracle-evidence">Verification data</label>
+                      <textarea
+                        id="oracle-evidence"
+                        className="input min-h-[80px]"
+                        value={oracleForm.evidence}
+                        onChange={(e) => setOracleForm(prev => ({ ...prev, evidence: e.target.value }))}
+                        placeholder="e.g. full legal name, date of birth, jurisdiction"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Only its hash is stored on-chain; keep the original for the oracles.
+                      </p>
+                    </div>
+                    <div>
+                      <label className="label" htmlFor="oracle-count">Required oracles (0 = registry default)</label>
+                      <input
+                        id="oracle-count"
+                        type="number"
+                        min="0"
+                        className="input"
+                        value={oracleForm.requiredOracles}
+                        onChange={(e) => setOracleForm(prev => ({ ...prev, requiredOracles: parseInt(e.target.value) || 0 }))}
+                      />
+                    </div>
                     <button
-                      type="button"
-                      onClick={addOracleField}
-                      className="btn-secondary text-sm flex items-center gap-1"
+                      type="submit"
+                      disabled={submitting}
+                      className="btn-primary flex items-center gap-2"
                     >
-                      <Plus size={16} />
-                      Add
+                      {submitting ? <RefreshCw size={18} className="animate-spin" /> : <Zap size={18} />}
+                      Configure Oracle Verification
                     </button>
-                  </div>
-                  <div className="space-y-2">
-                    {oracleAddresses.map((addr, index) => (
-                      <div key={index} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={addr}
-                          onChange={(e) => updateOracleField(index, e.target.value)}
-                          placeholder="0x..."
-                          className={`input flex-1 font-mono ${
-                            addr && !ethers.isAddress(addr) ? 'input-error' : ''
-                          }`}
-                        />
-                        {oracleAddresses.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeOracleField(index)}
-                            className="p-2 text-gray-400 hover:text-red-500"
-                          >
-                            <Trash2 size={20} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="btn-primary flex items-center gap-2"
-                >
-                  {submitting ? <RefreshCw size={18} className="animate-spin" /> : <Zap size={18} />}
-                  Configure Oracle Verification
-                </button>
+                  </form>
+                )}
               </div>
-            </form>
+            </div>
           )}
         </div>
       )}
+
+      <CreatorTriggerActions />
     </div>
   )
 }

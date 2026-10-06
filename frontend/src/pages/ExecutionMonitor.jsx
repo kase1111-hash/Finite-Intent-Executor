@@ -6,7 +6,6 @@ import {
   Activity,
   Play,
   CheckCircle,
-  XCircle,
   Clock,
   FileText,
   DollarSign,
@@ -14,138 +13,172 @@ import {
   RefreshCw,
   AlertTriangle,
   Zap,
+  Wallet,
 } from 'lucide-react'
 import { format } from 'date-fns'
+import CreatorSelector from '../components/CreatorSelector'
+import { sendTx, findInaction } from '../utils/transactions'
 
 function ExecutionMonitor() {
-  const { account, contracts, isConnected } = useWeb3()
+  const { account, contracts, isConnected, refreshKey } = useWeb3()
+  const [creatorOverride, setCreatorOverride] = useState(null)
+  const creator = creatorOverride ?? account
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [executionStatus, setExecutionStatus] = useState(null)
-  const [actionLogs, setActionLogs] = useState([])
+  const [status, setStatus] = useState(null)
 
   // Action form
-  const [actionForm, setActionForm] = useState({
-    actionType: 'fund_project',
-    query: '',
-    corpusHash: '',
-  })
+  const [actionForm, setActionForm] = useState({ action: '', query: '' })
 
   // Fund project form
-  const [fundForm, setFundForm] = useState({
-    projectAddress: '',
-    amount: '',
-    justification: '',
-    corpusHash: '',
-  })
+  const [fundForm, setFundForm] = useState({ recipient: '', amount: '', description: '' })
+
+  const [depositAmount, setDepositAmount] = useState('')
 
   const fetchExecutionData = useCallback(async () => {
-    if (!isConnected || !account || !contracts.ExecutionAgent) return
+    const agent = contracts.ExecutionAgent
+    if (!isConnected || !creator || !agent) return
 
     setLoading(true)
     try {
-      const status = await contracts.ExecutionAgent.getExecutionStatus(account)
-      setExecutionStatus(status)
-
-      // Fetch action logs
-      const logCount = await contracts.ExecutionAgent.getActionLogCount(account)
-      const logs = []
-
-      for (let i = 0; i < Math.min(Number(logCount), 50); i++) {
-        try {
-          const log = await contracts.ExecutionAgent.getActionLog(account, i)
-          logs.push({ index: i, ...log })
-        } catch {
-          // Skip failed log fetch
-        }
-      }
-
-      setActionLogs(logs.reverse()) // Most recent first
+      const [isActive, activatedAt, isSunset, treasury, logs, licenses, projects, intent, corpus] =
+        await Promise.all([
+          agent.isExecutionActive(creator),
+          agent.triggerTimestamps(creator),
+          agent.isSunset(creator),
+          agent.treasuries(creator),
+          agent.getExecutionLogs(creator),
+          agent.getLicenses(creator),
+          agent.getFundedProjects(creator),
+          contracts.IntentCaptureModule?.getIntent(creator).catch(() => null),
+          contracts.LexiconHolder?.getCorpus(creator).catch(() => null),
+        ])
+      setStatus({
+        isActive,
+        activatedAt: Number(activatedAt),
+        isSunset,
+        treasury,
+        logs: [...logs].reverse(), // Most recent first
+        licenseCount: licenses.length,
+        projects: [...projects].reverse(),
+        isTriggered: intent?.isTriggered ?? false,
+        corpusHash: corpus?.isFrozen ? corpus.corpusHash : null,
+      })
     } catch (err) {
       console.error('Failed to fetch execution data:', err)
+      setStatus(null)
     } finally {
       setLoading(false)
     }
-  }, [account, contracts, isConnected])
+  }, [contracts, creator, isConnected])
 
   useEffect(() => {
     fetchExecutionData()
-  }, [fetchExecutionData])
+  }, [fetchExecutionData, refreshKey])
 
-  const handleActivateExecution = async () => {
+  const submit = async (txPromise, messages) => {
     setSubmitting(true)
-    try {
-      const tx = await contracts.ExecutionAgent.activateExecution(account)
-      toast.loading('Activating execution...', { id: 'activate' })
-      await tx.wait()
-      toast.success('Execution activated!', { id: 'activate' })
-      fetchExecutionData()
-    } catch (err) {
-      console.error('Failed to activate:', err)
-      toast.error('Failed to activate execution. Please try again.')
-    } finally {
-      setSubmitting(false)
-    }
+    const receipt = await sendTx(txPromise, messages)
+    setSubmitting(false)
+    if (receipt) fetchExecutionData()
+    return receipt
+  }
+
+  const inactionWarning = (receipt) => {
+    const inaction = findInaction(receipt, contracts.ExecutionAgent)
+    return inaction
+      ? `No action taken: ${inaction.reason} (${inaction.confidence}% < 95% required). ` +
+        'Default to inaction.'
+      : null
+  }
+
+  const handleActivateExecution = () => {
+    submit(contracts.ExecutionAgent.activateExecution(creator), {
+      id: 'activate',
+      pending: 'Activating execution...',
+      success: 'Execution activated! The 20-year sunset clock has started.',
+      failure: 'Failed to activate execution',
+    })
   }
 
   const handleExecuteAction = async (e) => {
     e.preventDefault()
 
-    if (!actionForm.query.trim() || !actionForm.corpusHash.trim()) {
-      toast.error('Query and corpus hash are required')
+    if (!actionForm.action.trim()) {
+      toast.error('Describe the action to execute')
       return
     }
 
-    setSubmitting(true)
-    try {
-      const tx = await contracts.ExecutionAgent.executeAction(
-        account,
-        actionForm.actionType,
-        actionForm.query,
-        actionForm.corpusHash
-      )
-      toast.loading('Executing action...', { id: 'action' })
-      await tx.wait()
-      toast.success('Action executed!', { id: 'action' })
-      setActionForm({ actionType: 'fund_project', query: '', corpusHash: '' })
-      fetchExecutionData()
-    } catch (err) {
-      console.error('Failed to execute action:', err)
-      toast.error('Failed to execute action. Please try again.')
-    } finally {
-      setSubmitting(false)
-    }
+    const receipt = await submit(
+      contracts.ExecutionAgent.executeAction(
+        creator,
+        actionForm.action,
+        actionForm.query.trim() || actionForm.action,
+        status.corpusHash
+      ),
+      {
+        id: 'action',
+        pending: 'Executing action...',
+        success: 'Action executed and logged with its corpus citation.',
+        failure: 'Action rejected',
+        inspect: inactionWarning,
+      }
+    )
+    if (receipt) setActionForm({ action: '', query: '' })
   }
 
   const handleFundProject = async (e) => {
     e.preventDefault()
 
-    if (!ethers.isAddress(fundForm.projectAddress)) {
-      toast.error('Invalid project address')
+    if (!ethers.isAddress(fundForm.recipient)) {
+      toast.error('Invalid recipient address')
+      return
+    }
+    if (!fundForm.description.trim()) {
+      toast.error('Project description is required')
+      return
+    }
+    let amount
+    try {
+      amount = ethers.parseEther(fundForm.amount)
+    } catch {
+      toast.error('Enter a valid ETH amount')
       return
     }
 
-    setSubmitting(true)
-    try {
-      const amount = ethers.parseEther(fundForm.amount)
-      const tx = await contracts.ExecutionAgent.fundProject(
-        account,
-        fundForm.projectAddress,
+    const receipt = await submit(
+      contracts.ExecutionAgent.fundProject(
+        creator,
+        fundForm.recipient,
         amount,
-        fundForm.justification,
-        fundForm.corpusHash || ethers.ZeroHash
-      )
-      toast.loading('Funding project...', { id: 'fund' })
-      await tx.wait()
-      toast.success('Project funded!', { id: 'fund' })
-      setFundForm({ projectAddress: '', amount: '', justification: '', corpusHash: '' })
-      fetchExecutionData()
-    } catch (err) {
-      console.error('Failed to fund project:', err)
-      toast.error('Failed to fund project. Please try again.')
-    } finally {
-      setSubmitting(false)
+        fundForm.description,
+        status.corpusHash
+      ),
+      {
+        id: 'fund',
+        pending: 'Funding project...',
+        success: 'Project funded!',
+        failure: 'Failed to fund project',
+        inspect: inactionWarning,
+      }
+    )
+    if (receipt) setFundForm({ recipient: '', amount: '', description: '' })
+  }
+
+  const handleDeposit = async (e) => {
+    e.preventDefault()
+    let value
+    try {
+      value = ethers.parseEther(depositAmount)
+    } catch {
+      toast.error('Enter a valid ETH amount')
+      return
     }
+    const receipt = await submit(
+      contracts.ExecutionAgent.depositToTreasury(creator, { value }),
+      { id: 'deposit', pending: 'Depositing...', success: 'Deposited to treasury.', failure: 'Failed to deposit' }
+    )
+    if (receipt) setDepositAmount('')
   }
 
   if (!isConnected) {
@@ -158,7 +191,7 @@ function ExecutionMonitor() {
     )
   }
 
-  if (loading) {
+  if (loading && !status) {
     return (
       <div className="flex items-center justify-center py-20">
         <RefreshCw size={32} className="animate-spin text-primary-600" />
@@ -166,8 +199,10 @@ function ExecutionMonitor() {
     )
   }
 
-  const isActive = executionStatus?.isActive
-  const isSunset = executionStatus?.isSunset
+  const isActive = status?.isActive
+  const isSunset = status?.isSunset
+  const isActivated = status?.activatedAt > 0
+  const canActivate = status && !isActivated && status.isTriggered
 
   return (
     <div className="space-y-8">
@@ -186,13 +221,15 @@ function ExecutionMonitor() {
         </button>
       </div>
 
+      <CreatorSelector account={account} creator={creator} onChange={setCreatorOverride} />
+
       {/* Status Banner */}
       <div className={`card p-6 ${
         isSunset ? 'bg-sunset-50 border-sunset-200' :
         isActive ? 'bg-green-50 border-green-200' :
         'bg-gray-50'
       }`}>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             {isSunset ? (
               <AlertTriangle size={32} className="text-sunset-600" />
@@ -203,24 +240,27 @@ function ExecutionMonitor() {
             )}
             <div>
               <h2 className="text-lg font-semibold text-gray-900">
-                {isSunset ? 'Sunset Complete' :
+                {isSunset ? 'Sunset' :
                  isActive ? 'Execution Active' :
+                 isActivated ? 'Execution Window Ended' :
+                 canActivate ? 'Ready to Activate' :
                  'Execution Inactive'}
               </h2>
               <p className="text-sm text-gray-600">
-                {isSunset ? 'Intent has been sunset and transitioned to public domain' :
-                 isActive ? `Activated ${executionStatus?.activatedAt ?
-                   format(new Date(Number(executionStatus.activatedAt) * 1000), 'PPpp') : ''}` :
-                 'Waiting for trigger activation'}
+                {isSunset ? 'Execution has permanently halted; assets move to the public domain.' :
+                 isActive ? `Activated ${format(new Date(status.activatedAt * 1000), 'PPpp')}` :
+                 isActivated ? 'The 20-year execution window has elapsed. Sunset is due.' :
+                 canActivate ? 'The intent has been triggered. An executor can now activate execution.' :
+                 'Waiting for the intent to be triggered.'}
               </p>
             </div>
           </div>
 
-          {!isActive && !isSunset && (
+          {canActivate && (
             <button
               onClick={handleActivateExecution}
               disabled={submitting}
-              className="btn-primary flex items-center gap-2"
+              className="btn-primary flex items-center gap-2 shrink-0"
             >
               <Play size={18} />
               Activate Execution
@@ -230,41 +270,74 @@ function ExecutionMonitor() {
       </div>
 
       {/* Stats Grid */}
-      {executionStatus && (
+      {status && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="stat-card">
             <div className="flex items-center gap-2 text-gray-500 mb-2">
               <Zap size={18} />
               <span className="text-sm">Actions Executed</span>
             </div>
-            <p className="stat-value">{Number(executionStatus.actionsExecuted || 0)}</p>
+            <p className="stat-value">{status.logs.length}</p>
           </div>
           <div className="stat-card">
             <div className="flex items-center gap-2 text-gray-500 mb-2">
               <Shield size={18} />
               <span className="text-sm">Licenses Issued</span>
             </div>
-            <p className="stat-value">{Number(executionStatus.licensesIssued || 0)}</p>
+            <p className="stat-value">{status.licenseCount}</p>
           </div>
           <div className="stat-card">
             <div className="flex items-center gap-2 text-gray-500 mb-2">
               <DollarSign size={18} />
               <span className="text-sm">Projects Funded</span>
             </div>
-            <p className="stat-value">{Number(executionStatus.projectsFunded || 0)}</p>
+            <p className="stat-value">{status.projects.length}</p>
           </div>
           <div className="stat-card">
             <div className="flex items-center gap-2 text-gray-500 mb-2">
-              <DollarSign size={18} />
-              <span className="text-sm">Revenue Distributed</span>
+              <Wallet size={18} />
+              <span className="text-sm">Treasury</span>
             </div>
-            <p className="stat-value">{Number(executionStatus.revenueDistributed || 0)} ETH</p>
+            <p className="stat-value">{ethers.formatEther(status.treasury)} ETH</p>
           </div>
         </div>
       )}
 
+      {/* Treasury deposit (anyone) */}
+      {status && !isSunset && (
+        <form onSubmit={handleDeposit} className="card p-4 flex flex-col sm:flex-row sm:items-end gap-3">
+          <div className="flex-1">
+            <label className="label" htmlFor="deposit-amount">Deposit to this creator&apos;s treasury (ETH)</label>
+            <input
+              id="deposit-amount"
+              type="number"
+              value={depositAmount}
+              onChange={(e) => setDepositAmount(e.target.value)}
+              placeholder="1.0"
+              step="0.001"
+              min="0"
+              className="input"
+            />
+          </div>
+          <button type="submit" disabled={submitting} className="btn-secondary flex items-center gap-2 justify-center">
+            <Wallet size={18} />
+            Deposit
+          </button>
+        </form>
+      )}
+
       {/* Action Forms */}
-      {isActive && !isSunset && (
+      {isActive && !status.corpusHash && (
+        <div className="card p-4 bg-yellow-50 border-yellow-200 text-sm text-yellow-800 flex gap-3">
+          <AlertTriangle size={20} className="text-yellow-600 shrink-0" />
+          <p>
+            This creator&apos;s corpus has not been frozen in the Lexicon, so no action can be
+            resolved against it. An indexer must freeze the corpus first.
+          </p>
+        </div>
+      )}
+
+      {isActive && status.corpusHash && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Execute Action */}
           <div className="card">
@@ -272,36 +345,31 @@ function ExecutionMonitor() {
               <h3 className="font-semibold text-gray-900">Execute Action</h3>
             </div>
             <form onSubmit={handleExecuteAction} className="card-body space-y-4">
+              <p className="text-sm text-gray-600">
+                The query is resolved against the frozen corpus. The action executes only at 95%+
+                confidence; otherwise nothing happens. Political actions are always blocked.
+              </p>
               <div>
-                <label className="label">Action Type</label>
-                <select
-                  value={actionForm.actionType}
-                  onChange={(e) => setActionForm(prev => ({ ...prev, actionType: e.target.value }))}
+                <label className="label" htmlFor="action-text">Action</label>
+                <input
+                  id="action-text"
+                  type="text"
+                  value={actionForm.action}
+                  onChange={(e) => setActionForm(prev => ({ ...prev, action: e.target.value }))}
+                  placeholder="e.g. fund_digital_rights"
                   className="input"
-                >
-                  <option value="fund_project">Fund Project</option>
-                  <option value="issue_license">Issue License</option>
-                  <option value="distribute_revenue">Distribute Revenue</option>
-                  <option value="custom">Custom Action</option>
-                </select>
-              </div>
-              <div>
-                <label className="label">Query</label>
-                <textarea
-                  value={actionForm.query}
-                  onChange={(e) => setActionForm(prev => ({ ...prev, query: e.target.value }))}
-                  placeholder="Should I fund this AI safety project?"
-                  className="input min-h-[80px]"
+                  maxLength={1000}
                 />
               </div>
               <div>
-                <label className="label">Corpus Hash</label>
+                <label className="label" htmlFor="action-query">Corpus query (defaults to the action)</label>
                 <input
+                  id="action-query"
                   type="text"
-                  value={actionForm.corpusHash}
-                  onChange={(e) => setActionForm(prev => ({ ...prev, corpusHash: e.target.value }))}
-                  placeholder="0x..."
-                  className="input font-mono"
+                  value={actionForm.query}
+                  onChange={(e) => setActionForm(prev => ({ ...prev, query: e.target.value }))}
+                  placeholder="Semantic index keyword or resolved query"
+                  className="input"
                 />
               </div>
               <button
@@ -321,19 +389,25 @@ function ExecutionMonitor() {
               <h3 className="font-semibold text-gray-900">Fund Project</h3>
             </div>
             <form onSubmit={handleFundProject} className="card-body space-y-4">
+              <p className="text-sm text-gray-600">
+                Paid from the treasury. Resolves the corpus query
+                {' '}<code className="font-mono">fund_project:&lt;description&gt;</code>.
+              </p>
               <div>
-                <label className="label">Project Address</label>
+                <label className="label" htmlFor="fund-recipient">Recipient Address</label>
                 <input
+                  id="fund-recipient"
                   type="text"
-                  value={fundForm.projectAddress}
-                  onChange={(e) => setFundForm(prev => ({ ...prev, projectAddress: e.target.value }))}
+                  value={fundForm.recipient}
+                  onChange={(e) => setFundForm(prev => ({ ...prev, recipient: e.target.value.trim() }))}
                   placeholder="0x..."
                   className="input font-mono"
                 />
               </div>
               <div>
-                <label className="label">Amount (ETH)</label>
+                <label className="label" htmlFor="fund-amount">Amount (ETH)</label>
                 <input
+                  id="fund-amount"
                   type="number"
                   value={fundForm.amount}
                   onChange={(e) => setFundForm(prev => ({ ...prev, amount: e.target.value }))}
@@ -344,12 +418,14 @@ function ExecutionMonitor() {
                 />
               </div>
               <div>
-                <label className="label">Justification</label>
-                <textarea
-                  value={fundForm.justification}
-                  onChange={(e) => setFundForm(prev => ({ ...prev, justification: e.target.value }))}
-                  placeholder="Aligned with goal: Fund AI safety research..."
-                  className="input min-h-[60px]"
+                <label className="label" htmlFor="fund-description">Description</label>
+                <input
+                  id="fund-description"
+                  type="text"
+                  value={fundForm.description}
+                  onChange={(e) => setFundForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="e.g. digital_rights_grant"
+                  className="input"
                 />
               </div>
               <button
@@ -369,39 +445,32 @@ function ExecutionMonitor() {
       <div className="card">
         <div className="card-header flex items-center justify-between">
           <h3 className="font-semibold text-gray-900">Action Log</h3>
-          <span className="text-sm text-gray-500">{actionLogs.length} actions</span>
+          <span className="text-sm text-gray-500">{status?.logs.length ?? 0} actions</span>
         </div>
         <div className="divide-y divide-gray-100">
-          {actionLogs.length > 0 ? (
-            actionLogs.map((log, index) => (
-              <div key={index} className="p-4 hover:bg-gray-50">
+          {status?.logs.length > 0 ? (
+            status.logs.map((log, index) => (
+              <div key={`${index}-${log.decisionHash}`} className="p-4 hover:bg-gray-50">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3">
-                    <div className={`p-2 rounded-lg ${
-                      log.executed ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
-                    }`}>
-                      {log.executed ? <CheckCircle size={18} /> : <XCircle size={18} />}
+                    <div className="p-2 rounded-lg bg-green-50 text-green-600">
+                      <CheckCircle size={18} />
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900">{log.actionType}</p>
-                      <p className="text-sm text-gray-600 mt-1">{log.query}</p>
-                      {log.citation && (
+                      <p className="font-medium text-gray-900">{log.action}</p>
+                      {log.corpusCitation && (
                         <p className="text-sm text-primary-600 mt-1 italic">
-                          Citation: {log.citation}
+                          Citation: {log.corpusCitation}
                         </p>
                       )}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <span className={`badge ${
-                      log.confidence >= 95 ? 'badge-success' :
-                      log.confidence >= 80 ? 'badge-warning' :
-                      'badge-danger'
-                    }`}>
-                      {log.confidence}% confidence
+                  <div className="text-right shrink-0">
+                    <span className="badge badge-success">
+                      {Number(log.confidence)}% confidence
                     </span>
                     <p className="text-xs text-gray-500 mt-1">
-                      {log.timestamp ? format(new Date(Number(log.timestamp) * 1000), 'PP p') : ''}
+                      {format(new Date(Number(log.timestamp) * 1000), 'PP p')}
                     </p>
                   </div>
                 </div>
@@ -415,6 +484,34 @@ function ExecutionMonitor() {
           )}
         </div>
       </div>
+
+      {/* Funded Projects */}
+      {status?.projects.length > 0 && (
+        <div className="card">
+          <div className="card-header">
+            <h3 className="font-semibold text-gray-900">Funded Projects</h3>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {status.projects.map((project, index) => (
+              <div key={index} className="p-4 flex items-start justify-between gap-4 text-sm">
+                <div className="min-w-0">
+                  <p className="font-medium text-gray-900">{project.description}</p>
+                  <p className="font-mono text-gray-500 truncate">{project.recipient}</p>
+                  {project.corpusCitation && (
+                    <p className="text-primary-600 italic mt-1">Citation: {project.corpusCitation}</p>
+                  )}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="font-medium">{ethers.formatEther(project.fundingAmount)} ETH</p>
+                  <p className="text-xs text-gray-500">
+                    {format(new Date(Number(project.fundedAt) * 1000), 'PP p')}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

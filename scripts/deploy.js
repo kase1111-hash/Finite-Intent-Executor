@@ -2,6 +2,7 @@ import hre from "hardhat";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { deployFIE } from "./lib/deployFIE.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,11 +11,15 @@ const __dirname = path.dirname(__filename);
  * Finite Intent Executor - Production Deployment Script
  *
  * Deploys all FIE contracts with proper configuration and verification.
+ * The deployment and wiring itself lives in scripts/lib/deployFIE.js, which
+ * the test suite also uses.
  *
  * Usage:
+ *   npm run deploy                                  # local node (npm run node)
  *   npx hardhat run scripts/deploy.js --network <network>
  *
- * Networks: default (in-process), localhost, sepolia, goerli, mainnet, base, baseSepolia
+ * Networks: localhost, sepolia, mainnet, base, baseSepolia
+ *           (default = Hardhat's throwaway in-process chain)
  *
  * Environment Variables:
  *   PRIVATE_KEY - Deployer wallet private key
@@ -34,7 +39,10 @@ const CONFIG = {
   DEADMAN_INTERVAL: 30 * 24 * 60 * 60,
 
   // Networks that support verification
-  VERIFIABLE_NETWORKS: ['mainnet', 'sepolia', 'goerli', 'base', 'baseSepolia'],
+  VERIFIABLE_NETWORKS: ['mainnet', 'sepolia', 'base', 'baseSepolia'],
+
+  // Local development networks (no balance check, no "next steps" checklist)
+  LOCAL_NETWORKS: ['default', 'hardhat', 'localhost'],
 
   // Confirmation counts by network
   CONFIRMATIONS: {
@@ -43,21 +51,11 @@ const CONFIG = {
     hardhat: 1,
     localhost: 1,
     sepolia: 2,
-    goerli: 2,
     mainnet: 3,
     base: 2,
     baseSepolia: 2
   }
 };
-
-/**
- * Wait for transaction confirmations
- */
-async function waitForConfirmations(tx, network) {
-  const confirmations = CONFIG.CONFIRMATIONS[network] || 1;
-  console.log(`  Waiting for ${confirmations} confirmation(s)...`);
-  await tx.wait(confirmations);
-}
 
 /**
  * Verify contract on Etherscan/Basescan
@@ -93,36 +91,6 @@ async function verifyContract(address, constructorArgs, network) {
 }
 
 /**
- * Deploy a contract with retry logic
- */
-async function deployContract(name, factory, args = [], network) {
-  console.log(`\nDeploying ${name}...`);
-
-  let contract;
-  let retries = 3;
-
-  while (retries > 0) {
-    try {
-      contract = await factory.deploy(...args);
-      const deployTx = contract.deploymentTransaction();
-      console.log(`  Transaction hash: ${deployTx.hash}`);
-
-      await waitForConfirmations(deployTx, network);
-
-      const address = await contract.getAddress();
-      console.log(`  ✓ ${name} deployed to: ${address}`);
-
-      return { contract, address };
-    } catch (error) {
-      retries--;
-      if (retries === 0) throw error;
-      console.log(`  Retry ${3 - retries}/3: ${error.message}`);
-      await new Promise(r => setTimeout(r, 5000));
-    }
-  }
-}
-
-/**
  * Main deployment function
  */
 async function main() {
@@ -131,17 +99,24 @@ async function main() {
   const connection = await hre.network.connect();
   const { ethers } = connection;
   const network = connection.networkName;
-  const chainId = connection.networkConfig.chainId;
+  const chainId = Number((await ethers.provider.getNetwork()).chainId);
+  const isLocal = CONFIG.LOCAL_NETWORKS.includes(network);
   console.log("=".repeat(70));
   console.log("Finite Intent Executor (FIE) - Deployment");
   console.log("=".repeat(70));
   console.log(`Network: ${network}`);
-  console.log(`Chain ID: ${chainId || 'N/A'}`);
+  console.log(`Chain ID: ${chainId}`);
   console.log(`Timestamp: ${new Date().toISOString()}`);
 
   // [Audit fix: I-15] Network validation
   if (!CONFIG.CONFIRMATIONS[network]) {
     throw new Error(`Unknown network "${network}". Supported: ${Object.keys(CONFIG.CONFIRMATIONS).join(', ')}`);
+  }
+
+  if (network === 'default') {
+    console.log("\n⚠️  Deploying to Hardhat's in-process network. These contracts disappear");
+    console.log("    when this script exits. To deploy to a running node use `npm run deploy`");
+    console.log("    (which targets --network localhost) after starting `npm run node`.");
   }
 
   // [Audit fix: C-3, I-11] Require multisig for mainnet deployment
@@ -164,95 +139,35 @@ async function main() {
 
   // Check minimum balance
   const minBalance = ethers.parseEther("0.1");
-  if (balance < minBalance && network !== 'default' && network !== 'hardhat' && network !== 'localhost') {
+  if (balance < minBalance && !isLocal) {
     throw new Error(`Insufficient balance. Need at least 0.1 ETH for deployment.`);
   }
 
-  const deployedContracts = {};
-
-  // 1. Deploy LexiconHolder (no dependencies)
-  const LexiconHolder = await ethers.getContractFactory("LexiconHolder");
-  const { contract: lexiconHolder, address: lexiconHolderAddress } =
-    await deployContract("LexiconHolder", LexiconHolder, [], network);
-  deployedContracts.LexiconHolder = lexiconHolderAddress;
-
-  // 2. Deploy IntentCaptureModule
-  const IntentCaptureModule = await ethers.getContractFactory("IntentCaptureModule");
-  const { contract: intentModule, address: intentModuleAddress } =
-    await deployContract("IntentCaptureModule", IntentCaptureModule, [], network);
-  deployedContracts.IntentCaptureModule = intentModuleAddress;
-
-  // 3. Deploy TriggerMechanism
-  const TriggerMechanism = await ethers.getContractFactory("TriggerMechanism");
-  const { contract: triggerMechanism, address: triggerMechanismAddress } =
-    await deployContract("TriggerMechanism", TriggerMechanism, [intentModuleAddress], network);
-  deployedContracts.TriggerMechanism = triggerMechanismAddress;
-
-  // 4. Configure IntentCaptureModule permissions
-  console.log("\nConfiguring IntentCaptureModule permissions...");
-  const setTriggerTx = await intentModule.setTriggerMechanism(triggerMechanismAddress);
-  await waitForConfirmations(setTriggerTx, network);
-  console.log("  ✓ TriggerMechanism authorized");
-
-  // 5. Deploy ExecutionAgent
-  const ExecutionAgent = await ethers.getContractFactory("ExecutionAgent");
-  const { contract: executionAgent, address: executionAgentAddress } =
-    await deployContract("ExecutionAgent", ExecutionAgent, [lexiconHolderAddress], network);
-  deployedContracts.ExecutionAgent = executionAgentAddress;
-
-  // 6. Deploy SunsetProtocol
-  const SunsetProtocol = await ethers.getContractFactory("SunsetProtocol");
-  const { contract: sunsetProtocol, address: sunsetProtocolAddress } =
-    await deployContract("SunsetProtocol", SunsetProtocol, [executionAgentAddress, lexiconHolderAddress], network);
-  deployedContracts.SunsetProtocol = sunsetProtocolAddress;
-
-  // 7. Deploy IPToken
-  const IPToken = await ethers.getContractFactory("IPToken");
-  const { contract: ipToken, address: ipTokenAddress } =
-    await deployContract("IPToken", IPToken, [], network);
-  deployedContracts.IPToken = ipTokenAddress;
-
-  // 8. Configure cross-contract permissions
-  console.log("\nConfiguring cross-contract permissions...");
-
-  // [Audit fix: H-2] Grant SUNSET_ROLE to SunsetProtocol for activateSunset()
-  const SUNSET_ROLE = ethers.keccak256(ethers.toUtf8Bytes("SUNSET_ROLE"));
-  const grantSunsetTx = await executionAgent.grantRole(SUNSET_ROLE, sunsetProtocolAddress);
-  await waitForConfirmations(grantSunsetTx, network);
-  console.log("  ✓ SUNSET_ROLE granted to SunsetProtocol");
-
-  // Set ExecutionAgent in TriggerMechanism
-  if (typeof triggerMechanism.setExecutionAgent === 'function') {
-    const setExecTx = await triggerMechanism.setExecutionAgent(executionAgentAddress);
-    await waitForConfirmations(setExecTx, network);
-    console.log("  ✓ ExecutionAgent linked to TriggerMechanism");
-  }
-
-  // Set SunsetProtocol in ExecutionAgent
-  if (typeof executionAgent.setSunsetProtocol === 'function') {
-    const setSunsetTx = await executionAgent.setSunsetProtocol(sunsetProtocolAddress);
-    await waitForConfirmations(setSunsetTx, network);
-    console.log("  ✓ SunsetProtocol linked to ExecutionAgent");
-  }
-
-  // Set IPToken in ExecutionAgent
-  if (typeof executionAgent.setIPToken === 'function') {
-    const setIPTx = await executionAgent.setIPToken(ipTokenAddress);
-    await waitForConfirmations(setIPTx, network);
-    console.log("  ✓ IPToken linked to ExecutionAgent");
-  }
+  // 1-8. Deploy and wire the contracts
+  const { contracts, addresses } = await deployFIE(ethers, {
+    confirmations: CONFIG.CONFIRMATIONS[network],
+    log: (message) => console.log(message),
+  });
+  const {
+    LexiconHolder: lexiconHolder,
+    IntentCaptureModule: intentModule,
+    TriggerMechanism: triggerMechanism,
+    ExecutionAgent: executionAgent,
+    SunsetProtocol: sunsetProtocol,
+    IPToken: ipToken,
+  } = contracts;
 
   // 9. Verify contracts on Etherscan
   console.log("\n" + "-".repeat(70));
   console.log("Contract Verification");
   console.log("-".repeat(70));
 
-  await verifyContract(lexiconHolderAddress, [], network);
-  await verifyContract(intentModuleAddress, [], network);
-  await verifyContract(triggerMechanismAddress, [intentModuleAddress], network);
-  await verifyContract(executionAgentAddress, [lexiconHolderAddress], network);
-  await verifyContract(sunsetProtocolAddress, [executionAgentAddress, lexiconHolderAddress], network);
-  await verifyContract(ipTokenAddress, [], network);
+  await verifyContract(addresses.LexiconHolder, [], network);
+  await verifyContract(addresses.IntentCaptureModule, [], network);
+  await verifyContract(addresses.TriggerMechanism, [addresses.IntentCaptureModule], network);
+  await verifyContract(addresses.ExecutionAgent, [addresses.LexiconHolder], network);
+  await verifyContract(addresses.SunsetProtocol, [addresses.ExecutionAgent, addresses.LexiconHolder], network);
+  await verifyContract(addresses.IPToken, [], network);
 
   // 10. Save deployment info
   const deploymentInfo = {
@@ -261,7 +176,7 @@ async function main() {
     deployer: deployer.address,
     timestamp: new Date().toISOString(),
     blockNumber: await ethers.provider.getBlockNumber(),
-    contracts: deployedContracts,
+    contracts: addresses,
     configuration: {
       sunsetDurationYears: 20,
       confidenceThreshold: CONFIG.CONFIDENCE_THRESHOLD,
@@ -279,34 +194,29 @@ async function main() {
   fs.writeFileSync(deploymentFile, JSON.stringify(deploymentInfo, null, 2));
 
   // Also save to root for convenience
-  fs.writeFileSync('deployment-addresses.json', JSON.stringify(deploymentInfo, null, 2));
+  const rootDeploymentFile = path.join(__dirname, '..', 'deployment-addresses.json');
+  fs.writeFileSync(rootDeploymentFile, JSON.stringify(deploymentInfo, null, 2));
 
-  // 11. Generate frontend config
-  const frontendConfig = `// Auto-generated by deployment script
+  // 11. Generate frontend config. The dashboard picks this file up
+  // automatically (see frontend/src/contracts/config.js), so a local
+  // deployment needs no manual address copying. It is not written for the
+  // throwaway in-process network, whose addresses would point at nothing.
+  const frontendConfigPath = path.join(__dirname, '..', 'frontend', 'src', 'contracts', 'deployedAddresses.js');
+  if (network !== 'default') {
+    const frontendConfig = `// Auto-generated by scripts/deploy.js - do not edit.
 // Network: ${network}
 // Deployed: ${new Date().toISOString()}
 
-export const DEPLOYED_ADDRESSES = {
-  INTENT_MODULE: "${intentModuleAddress}",
-  TRIGGER_MECHANISM: "${triggerMechanismAddress}",
-  EXECUTION_AGENT: "${executionAgentAddress}",
-  LEXICON_HOLDER: "${lexiconHolderAddress}",
-  SUNSET_PROTOCOL: "${sunsetProtocolAddress}",
-  IP_TOKEN: "${ipTokenAddress}"
-};
+export const DEPLOYED_ADDRESSES = ${JSON.stringify(addresses, null, 2)};
 
-export const NETWORK_CONFIG = {
-  chainId: ${chainId || 31337},
+export const DEPLOYED_NETWORK = {
+  chainId: ${chainId},
   name: "${network}"
 };
 `;
-
-  const frontendConfigPath = path.join(__dirname, '..', 'frontend', 'src', 'contracts', 'deployedAddresses.js');
-  const frontendContractsDir = path.dirname(frontendConfigPath);
-  if (!fs.existsSync(frontendContractsDir)) {
-    fs.mkdirSync(frontendContractsDir, { recursive: true });
+    fs.mkdirSync(path.dirname(frontendConfigPath), { recursive: true });
+    fs.writeFileSync(frontendConfigPath, frontendConfig);
   }
-  fs.writeFileSync(frontendConfigPath, frontendConfig);
 
   // Summary
   console.log("\n" + "=".repeat(70));
@@ -314,13 +224,15 @@ export const NETWORK_CONFIG = {
   console.log("=".repeat(70));
   console.log("\nContract Addresses:");
   console.log("-".repeat(40));
-  Object.entries(deployedContracts).forEach(([name, address]) => {
+  Object.entries(addresses).forEach(([name, address]) => {
     console.log(`  ${name.padEnd(22)} ${address}`);
   });
   console.log("\nDeployment saved to:");
-  console.log(`  - ${deploymentFile}`);
-  console.log(`  - deployment-addresses.json`);
-  console.log(`  - frontend/src/contracts/deployedAddresses.js`);
+  console.log(`  - ${path.relative(process.cwd(), deploymentFile)}`);
+  console.log(`  - ${path.relative(process.cwd(), rootDeploymentFile)}`);
+  if (network !== 'default') {
+    console.log(`  - ${path.relative(process.cwd(), frontendConfigPath)}`);
+  }
 
   // [Audit fix: C-3, H-3, I-13] Role transfer to multisig
   if (process.env.MULTISIG_ADDRESS && process.env.TRANSFER_ROLES === 'true') {
@@ -340,14 +252,17 @@ export const NETWORK_CONFIG = {
     await (await ipToken.grantRole(DEFAULT_ADMIN_ROLE, multisig)).wait();
     console.log("  ✓ DEFAULT_ADMIN_ROLE granted to multisig on AccessControl contracts");
 
-    // Transfer ownership on Ownable contracts
+    // Start ownership transfer on Ownable2Step contracts. The multisig must
+    // call acceptOwnership() on each to complete it.
     await (await intentModule.transferOwnership(multisig)).wait();
     await (await triggerMechanism.transferOwnership(multisig)).wait();
-    console.log("  ✓ Ownership transferred to multisig on Ownable contracts");
+    console.log("  ✓ Ownership transfer started on IntentCaptureModule and TriggerMechanism");
+    console.log("    (multisig must call acceptOwnership() on each to complete it)");
 
     // Renounce deployer's operational roles
     await (await executionAgent.renounceRole(EXECUTOR_ROLE, deployer.address)).wait();
     await (await lexiconHolder.renounceRole(INDEXER_ROLE, deployer.address)).wait();
+    await (await sunsetProtocol.renounceRole(SUNSET_OPERATOR_ROLE, deployer.address)).wait();
     await (await ipToken.renounceRole(MINTER_ROLE, deployer.address)).wait();
     await (await ipToken.renounceRole(EXECUTOR_ROLE, deployer.address)).wait();
     console.log("  ✓ Deployer operational roles renounced");
@@ -367,17 +282,25 @@ export const NETWORK_CONFIG = {
 
     // Re-save deployment info with role transfer data
     fs.writeFileSync(deploymentFile, JSON.stringify(deploymentInfo, null, 2));
-    fs.writeFileSync('deployment-addresses.json', JSON.stringify(deploymentInfo, null, 2));
+    fs.writeFileSync(rootDeploymentFile, JSON.stringify(deploymentInfo, null, 2));
   }
 
-  if (network !== 'default' && network !== 'hardhat' && network !== 'localhost') {
+  if (network === 'localhost') {
     console.log("\nNext Steps:");
-    console.log("  1. Update frontend .env with contract addresses");
+    console.log("  1. Start the dashboard:   cd frontend && npm install && npm run dev");
+    console.log("  2. Open http://localhost:3000 and click \"Connect Wallet\".");
+    console.log(`     Use account ${deployer.address} (Hardhat account #0) — it holds every`);
+    console.log("     operator role, so all dashboard actions work. In MetaMask, add the");
+    console.log(`     network http://127.0.0.1:8545 (chain ID ${chainId}) and import that`);
+    console.log("     account's private key from the `npm run node` output.");
+  } else if (!isLocal) {
+    console.log("\nNext Steps:");
+    console.log("  1. Point the frontend at this deployment (frontend/.env, see frontend/.env.example)");
     console.log("  2. Verify contracts on block explorer (if not auto-verified)");
     console.log("  3. Configure oracle integrations");
     console.log("  4. Test all contract interactions");
     if (!process.env.TRANSFER_ROLES) {
-      console.log("  5. Transfer roles to multi-sig: MULTISIG_ADDRESS=<addr> TRANSFER_ROLES=true npx hardhat run scripts/deploy.js");
+      console.log(`  5. Transfer roles to multi-sig: MULTISIG_ADDRESS=<addr> TRANSFER_ROLES=true npx hardhat run scripts/deploy.js --network ${network}`);
     }
   }
 
@@ -386,10 +309,7 @@ export const NETWORK_CONFIG = {
   return deploymentInfo;
 }
 
-// Export for testing
-export { main, CONFIG };
-
-// Run if called directly via `hardhat run`
+// Run when invoked via `hardhat run`
 main()
   .then(() => process.exit(0))
   .catch((error) => {

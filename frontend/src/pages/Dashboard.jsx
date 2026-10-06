@@ -83,11 +83,22 @@ function Dashboard() {
 
     setLoading(true)
     try {
+      const agent = contracts.ExecutionAgent
       const [intent, trigger, execution, sunset] = await Promise.all([
         contracts.IntentCaptureModule?.getIntent(account).catch(() => null),
         contracts.TriggerMechanism?.getTriggerConfig(account).catch(() => null),
-        contracts.ExecutionAgent?.getExecutionStatus(account).catch(() => null),
-        contracts.SunsetProtocol?.getSunsetStatus(account).catch(() => null),
+        agent
+          ? Promise.all([
+              agent.isExecutionActive(account),
+              agent.triggerTimestamps(account),
+              agent.getExecutionLogs(account),
+            ]).then(([isActive, activatedAt, logs]) => ({
+              isActive,
+              activatedAt: Number(activatedAt),
+              actionsExecuted: logs.length,
+            })).catch(() => null)
+          : null,
+        contracts.SunsetProtocol?.getSunsetState(account).catch(() => null),
       ])
 
       let tokenCount = 0
@@ -129,16 +140,19 @@ function Dashboard() {
   }
 
   const hasIntent = data.intent && data.intent.intentHash !== '0x0000000000000000000000000000000000000000000000000000000000000000'
-  const triggerType = data.trigger ? TRIGGER_TYPES[data.trigger.triggerType] : 'Not Configured'
+  const triggerType = data.trigger?.isConfigured
+    ? TRIGGER_TYPES[Number(data.trigger.triggerType)]
+    : 'Not Configured'
   const isTriggered = data.trigger?.isTriggered
   const isExecutionActive = data.execution?.isActive
-  const isSunset = data.sunset?.isComplete
+  const isSunset = data.sunset?.completed
 
-  // Calculate sunset countdown
+  // Calculate sunset countdown. The 20-year clock starts when execution is
+  // activated (ExecutionAgent.triggerTimestamps).
   let sunsetCountdown = null
   let sunsetProgress = 0
-  if (data.trigger?.triggeredAt && !isSunset) {
-    const triggerDate = new Date(Number(data.trigger.triggeredAt) * 1000)
+  if (data.execution?.activatedAt && !isSunset) {
+    const triggerDate = new Date(data.execution.activatedAt * 1000)
     const sunsetDate = new Date(triggerDate.getTime() + 20 * 365 * 24 * 60 * 60 * 1000)
     const now = new Date()
     const totalDays = 20 * 365
@@ -188,7 +202,9 @@ function Dashboard() {
             <StatusBadge status={getOverallStatus()} />
             <span className="text-gray-700">
               {isSunset ? 'Your legacy has been sunset and transitioned to public domain.' :
-               isTriggered ? 'Trigger activated. Execution agent is active.' :
+               isTriggered ? (isExecutionActive
+                 ? 'Trigger activated. Execution agent is active.'
+                 : 'Trigger activated. Waiting for an executor to activate execution.') :
                hasIntent ? 'Intent captured and secured on-chain.' :
                'No intent captured yet. Get started below.'}
             </span>
@@ -235,7 +251,9 @@ function Dashboard() {
           icon={FileText}
           label="Intent Status"
           value={hasIntent ? 'Captured' : 'Not Set'}
-          subValue={hasIntent && data.intent ? `Version ${data.intent.version}` : null}
+          subValue={hasIntent && data.intent
+            ? `Captured ${format(new Date(Number(data.intent.captureTimestamp) * 1000), 'PP')}`
+            : null}
           color={hasIntent ? 'green' : 'yellow'}
           link="/intent"
         />
@@ -243,7 +261,7 @@ function Dashboard() {
           icon={Zap}
           label="Trigger"
           value={triggerType}
-          subValue={isTriggered ? 'Activated' : 'Waiting'}
+          subValue={!data.trigger?.isConfigured ? 'Set one up' : isTriggered ? 'Activated' : 'Armed'}
           color={isTriggered ? 'sunset' : 'primary'}
           link="/triggers"
         />
@@ -333,15 +351,19 @@ function Dashboard() {
               <div>
                 <dt className="text-sm text-gray-500">Created</dt>
                 <dd className="text-gray-900">
-                  {data.intent?.createdAt ?
-                    format(new Date(Number(data.intent.createdAt) * 1000), 'PPP') :
+                  {data.intent?.captureTimestamp ?
+                    format(new Date(Number(data.intent.captureTimestamp) * 1000), 'PPP') :
                     'Unknown'}
                 </dd>
               </div>
               <div>
                 <dt className="text-sm text-gray-500">Status</dt>
                 <dd>
-                  <StatusBadge status={data.intent?.isRevoked ? 'revoked' : 'active'} />
+                  <StatusBadge status={
+                    data.intent?.isRevoked ? 'revoked' :
+                    data.intent?.isTriggered ? 'triggered' :
+                    'active'
+                  } />
                 </dd>
               </div>
             </dl>

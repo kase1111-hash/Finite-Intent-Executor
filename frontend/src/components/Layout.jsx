@@ -1,7 +1,8 @@
 import React from 'react'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
-import { useWeb3 } from '../context/Web3Context'
+import { useWeb3, LOCAL_ACCOUNTS_ENABLED } from '../context/Web3Context'
 import { NETWORKS } from '../contracts/config'
+import LocalChainTools from './LocalChainTools'
 import {
   LayoutDashboard,
   FileText,
@@ -15,6 +16,8 @@ import {
   Menu,
   X,
   ExternalLink,
+  AlertTriangle,
+  Terminal,
 } from 'lucide-react'
 
 const navItems = [
@@ -27,8 +30,66 @@ const navItems = [
   { path: '/sunset', label: 'Sunset', icon: Sunset },
 ]
 
+function SetupBanner() {
+  const { isConnected, isWrongNetwork, expectedChainId, chainId, unavailableContracts } = useWeb3()
+
+  if (!isConnected) return null
+
+  if (isWrongNetwork) {
+    const expected = NETWORKS[expectedChainId]?.name || `chain ${expectedChainId}`
+    const current = NETWORKS[chainId]?.name || `chain ${chainId}`
+    return (
+      <div className="card p-4 mb-6 bg-yellow-50 border-yellow-200 flex gap-3" role="alert">
+        <AlertTriangle size={20} className="text-yellow-600 shrink-0 mt-0.5" />
+        <div className="text-sm text-yellow-800">
+          <p className="font-medium">Wrong network</p>
+          <p>
+            Your wallet is on {current}, but the contracts are deployed on {expected}.
+            Switch networks in your wallet.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (unavailableContracts.length > 0) {
+    return (
+      <div className="card p-4 mb-6 bg-yellow-50 border-yellow-200 flex gap-3" role="alert">
+        <AlertTriangle size={20} className="text-yellow-600 shrink-0 mt-0.5" />
+        <div className="text-sm text-yellow-800 space-y-1">
+          <p className="font-medium">Some contracts are not available</p>
+          <ul className="list-disc list-inside">
+            {unavailableContracts.map(({ name, reason }) => (
+              <li key={name}>{name}: {reason}</li>
+            ))}
+          </ul>
+          <p>
+            For local development, run <code className="font-mono">npm run node</code> and
+            then <code className="font-mono">npm run deploy</code> in the repository root,
+            and reload this page. For other networks, set the contract addresses in
+            {' '}<code className="font-mono">frontend/.env</code>.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return null
+}
+
 function Layout() {
-  const { account, chainId, isConnected, isConnecting, connect, disconnect } = useWeb3()
+  const {
+    account,
+    chainId,
+    isConnected,
+    isConnecting,
+    connect,
+    connectLocal,
+    disconnect,
+    walletType,
+    localAccounts,
+    switchLocalAccount,
+  } = useWeb3()
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
   const location = useLocation()
 
@@ -88,6 +149,7 @@ function Layout() {
 
         {/* Connection status */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 bg-gray-50">
+          {isConnected && <LocalChainTools />}
           {isConnected ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm">
@@ -97,7 +159,7 @@ function Layout() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Wallet size={16} className="text-gray-500" />
-                  <span className="text-sm font-medium">{formatAddress(account)}</span>
+                  <span className="text-sm font-medium" title={account}>{formatAddress(account)}</span>
                 </div>
                 <button
                   onClick={disconnect}
@@ -107,16 +169,45 @@ function Layout() {
                   <LogOut size={16} />
                 </button>
               </div>
+              {walletType === 'local' && localAccounts.length > 0 && (
+                <label className="block text-xs text-gray-500">
+                  Local account
+                  <select
+                    className="input mt-1 text-sm py-1"
+                    value={localAccounts.findIndex(a => a.toLowerCase() === account?.toLowerCase())}
+                    onChange={(e) => switchLocalAccount(Number(e.target.value))}
+                  >
+                    {localAccounts.map((address, index) => (
+                      <option key={address} value={index}>
+                        #{index} {formatAddress(address)}{index === 0 ? ' (deployer)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
           ) : (
-            <button
-              onClick={connect}
-              disabled={isConnecting}
-              className="btn-primary w-full flex items-center justify-center gap-2"
-            >
-              <Wallet size={18} />
-              {isConnecting ? 'Connecting...' : 'Connect Wallet'}
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={connect}
+                disabled={isConnecting}
+                className="btn-primary w-full flex items-center justify-center gap-2"
+              >
+                <Wallet size={18} />
+                {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+              </button>
+              {LOCAL_ACCOUNTS_ENABLED && (
+                <button
+                  onClick={() => connectLocal(0)}
+                  disabled={isConnecting}
+                  className="btn-secondary w-full flex items-center justify-center gap-2 text-sm"
+                  title="Development only: use an unlocked account of the local Hardhat node (npm run node)"
+                >
+                  <Terminal size={16} />
+                  Use Local Dev Account
+                </button>
+              )}
+            </div>
           )}
         </div>
       </aside>
@@ -157,6 +248,7 @@ function Layout() {
 
         {/* Page content */}
         <main className="p-4 lg:p-8">
+          <SetupBanner />
           <Outlet />
         </main>
       </div>
