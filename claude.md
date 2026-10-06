@@ -8,8 +8,8 @@ A blockchain-based digital estate and posthumous intent execution system. FIE ca
 
 ## Tech Stack
 
-- **Smart Contracts**: Solidity 0.8.20, Hardhat 2.22.0, OpenZeppelin 5.4.0
-- **Frontend**: React 19, Vite 6.2, ethers.js 6.16, Tailwind CSS
+- **Smart Contracts**: Solidity ^0.8.20 (compiled with 0.8.28), Hardhat 3, OpenZeppelin 5.4.0
+- **Frontend**: React 19, Vite 6, ethers.js 6, Tailwind CSS 4
 - **Testing**: Hardhat Test, Foundry (fuzzing), Certora (formal verification)
 - **ZK Proofs**: Circom circuits with Groth16/PLONK verifiers
 
@@ -30,12 +30,13 @@ contracts/                  # Smart contracts
 frontend/src/               # React dashboard
 ├── pages/                  # Dashboard, IntentCapture, TriggerConfig, MonitoringDashboard, etc.
 ├── context/                # Web3Context for wallet connection
-└── contracts/              # Contract ABIs
+└── contracts/              # Generated ABIs (abis.js), addresses, constants
 
 indexer-service/            # Off-chain semantic indexer (TypeScript)
-test/                       # Hardhat test suites (11 files)
+test/                       # Hardhat test suites (13 files)
 foundry-tests/              # Foundry fuzz tests (7 files)
 scripts/                    # Deployment and utility scripts
+└── lib/deployFIE.js        # Deploys + wires the contracts (used by deploy.js and tests)
 circuits/                   # Circom ZK circuits
 ```
 
@@ -53,10 +54,14 @@ npm test
 
 # Deploy locally
 npm run node          # Start local Hardhat node (separate terminal)
-npm run deploy        # Deploy contracts
+npm run deploy        # Deploy contracts to it (--network localhost)
 
-# Frontend development
+# Frontend development (picks up the local deployment automatically;
+# "Use Local Dev Account" connects without MetaMask)
 cd frontend && npm run dev
+
+# Regenerate the frontend ABIs after changing a contract's external interface
+npm run export-abis
 
 # Gas benchmarking
 npm run test:gas
@@ -121,6 +126,17 @@ BOUNDARY_SIEM_ENDPOINT=    # Security monitoring (optional)
 - `INDEXER_ROLE` - Can freeze corpus, create indices, manage clusters (LexiconHolder)
 - `SUNSET_OPERATOR_ROLE` - Can initiate sunset, archive assets (SunsetProtocol)
 - `MINTER_ROLE` - Can mint new IP tokens (IPToken)
+
+## Keeping the Pieces in Sync
+
+- **Frontend ABIs** (`frontend/src/contracts/abis.js`) are generated from the
+  compiled contracts. Never hand-edit them; run `npm run export-abis`.
+  `test/FrontendAbis.test.js` fails when they drift.
+- **Deployment wiring** (cross-contract role grants) lives only in
+  `scripts/lib/deployFIE.js`. `test/Deployment.test.js` runs the full
+  lifecycle on exactly that wiring.
+- **Indexer ABI** (`indexer-service/src/submitter.ts`) is hand-written; event
+  signatures must match `LexiconHolder.sol` exactly or events are never received.
 
 ## Important Notes
 

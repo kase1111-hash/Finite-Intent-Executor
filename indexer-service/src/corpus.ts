@@ -12,7 +12,7 @@
  * as one chunk. Future versions may support structured JSON corpora.
  */
 
-import { createHash } from "crypto";
+import { ethers } from "ethers";
 import { loadConfig } from "./config";
 
 // ---------------------------------------------------------------------------
@@ -57,26 +57,14 @@ export function resolveStorageURI(storageURI: string): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Computes the keccak-256 hash of a buffer and returns it as a 0x-prefixed
- * hex string.
+ * Computes the keccak-256 hash of a buffer (Solidity's keccak256, and what
+ * the dashboard commits on-chain) as a 0x-prefixed hex string.
  *
- * Note: We use Node's built-in "sha3-256" which is standard Keccak-256
- * (the same algorithm used by Solidity's keccak256). If the Node.js build
- * does not support "sha3-256", we fall back to SHA-256 with a logged warning.
+ * Note: this is not Node's "sha3-256". NIST SHA3-256 pads differently from
+ * the original Keccak-256 that Ethereum uses, so their digests never match.
  */
 function computeHash(data: Buffer): string {
-  try {
-    const hash = createHash("sha3-256").update(data).digest("hex");
-    return "0x" + hash;
-  } catch {
-    // Fallback for environments without sha3 support.
-    console.warn(
-      "[corpus] sha3-256 not available, falling back to sha256. " +
-        "Hash verification may not match on-chain keccak256."
-    );
-    const hash = createHash("sha256").update(data).digest("hex");
-    return "0x" + hash;
-  }
+  return ethers.keccak256(data);
 }
 
 // ---------------------------------------------------------------------------

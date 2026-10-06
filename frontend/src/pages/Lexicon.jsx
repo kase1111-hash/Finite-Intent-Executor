@@ -14,13 +14,19 @@ import {
   Hash,
   Calendar,
 } from 'lucide-react'
-import { format } from 'date-fns'
+import CreatorSelector from '../components/CreatorSelector'
+import { sendTx } from '../utils/transactions'
+import { getErrorMessage } from '../utils/errors'
 
 function Lexicon() {
-  const { account, contracts, isConnected } = useWeb3()
+  const { account, contracts, isConnected, refreshKey } = useWeb3()
+  const [creatorOverride, setCreatorOverride] = useState(null)
+  const creator = creatorOverride ?? account
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [corpus, setCorpus] = useState(null)
+  // The creator's captured intent, whose corpus commitment the freeze reuses
+  const [intent, setIntent] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState(null)
 
@@ -40,26 +46,54 @@ function Lexicon() {
   })
 
   const fetchCorpusData = useCallback(async () => {
-    if (!isConnected || !account || !contracts.LexiconHolder) return
+    if (!isConnected || !creator || !contracts.LexiconHolder) return
 
     setLoading(true)
     try {
-      const corpusData = await contracts.LexiconHolder.getCorpus(account)
-      const hasCorpus = corpusData.corpusHash !== '0x0000000000000000000000000000000000000000000000000000000000000000'
-
-      if (hasCorpus) {
-        setCorpus(corpusData)
-      }
+      const [corpusData, intentData] = await Promise.all([
+        contracts.LexiconHolder.getCorpus(creator),
+        contracts.IntentCaptureModule?.getIntent(creator).catch(() => null),
+      ])
+      setCorpus(corpusData.isFrozen ? corpusData : null)
+      setIntent(intentData && intentData.intentHash !== ethers.ZeroHash ? intentData : null)
     } catch (err) {
       console.error('Failed to fetch corpus:', err)
     } finally {
       setLoading(false)
     }
-  }, [account, contracts, isConnected])
+  }, [contracts, creator, isConnected])
 
   useEffect(() => {
     fetchCorpusData()
-  }, [fetchCorpusData])
+  }, [fetchCorpusData, refreshKey])
+
+  const submit = async (txPromise, messages) => {
+    setSubmitting(true)
+    const receipt = await sendTx(txPromise, messages)
+    setSubmitting(false)
+    if (receipt) fetchCorpusData()
+    return receipt
+  }
+
+  const freezeMessages = {
+    id: 'freeze',
+    pending: 'Freezing corpus...',
+    success: 'Corpus frozen successfully!',
+    failure: 'Failed to freeze corpus',
+  }
+
+  const handleFreezeFromIntent = () => {
+    submit(
+      contracts.LexiconHolder.freezeCorpus(
+        creator,
+        intent.corpusHash,
+        intent.corpusURI,
+        intent.corpusStartYear,
+        intent.corpusEndYear
+      ),
+      freezeMessages
+    )
+  }
 
   const handleFreezeCorpus = async (e) => {
     e.preventDefault()
@@ -69,34 +103,22 @@ function Lexicon() {
       return
     }
 
-    const yearDiff = freezeForm.endYear - freezeForm.startYear
-    if (yearDiff < 5 || yearDiff > 10) {
-      toast.error('Corpus window must be 5-10 years')
+    if (!(freezeForm.endYear > freezeForm.startYear)) {
+      toast.error('End year must be after start year')
       return
     }
 
-    setSubmitting(true)
-    try {
-      const corpusHash = ethers.keccak256(ethers.toUtf8Bytes(freezeForm.corpusContent))
-
-      const tx = await contracts.LexiconHolder.freezeCorpus(
-        account,
+    const corpusHash = ethers.keccak256(ethers.toUtf8Bytes(freezeForm.corpusContent))
+    submit(
+      contracts.LexiconHolder.freezeCorpus(
+        creator,
         corpusHash,
         freezeForm.storageUri,
         freezeForm.startYear,
         freezeForm.endYear
-      )
-
-      toast.loading('Freezing corpus...', { id: 'freeze' })
-      await tx.wait()
-      toast.success('Corpus frozen successfully!', { id: 'freeze' })
-      fetchCorpusData()
-    } catch (err) {
-      console.error('Failed to freeze corpus:', err)
-      toast.error('Failed to freeze corpus. Please try again.')
-    } finally {
-      setSubmitting(false)
-    }
+      ),
+      freezeMessages
+    )
   }
 
   const handleCreateIndex = async (e) => {
@@ -113,31 +135,31 @@ function Lexicon() {
       return
     }
 
-    setSubmitting(true)
-    try {
-      const scores = indexForm.relevanceScores.slice(0, validCitations.length)
+    // Keep each score paired with its own citation when blank rows are skipped
+    const scores = indexForm.citations
+      .map((c, i) => [c, indexForm.relevanceScores[i]])
+      .filter(([c]) => c.trim())
+      .map(([, score]) => score)
+    if (scores.some(score => !(score >= 0 && score <= 100))) {
+      toast.error('Relevance scores must be between 0 and 100')
+      return
+    }
 
-      const tx = await contracts.LexiconHolder.createSemanticIndex(
-        account,
+    const receipt = await submit(
+      contracts.LexiconHolder.createSemanticIndex(
+        creator,
         indexForm.keyword,
         validCitations,
         scores
-      )
-
-      toast.loading('Creating semantic index...', { id: 'index' })
-      await tx.wait()
-      toast.success('Semantic index created!', { id: 'index' })
-
+      ),
+      { id: 'index', pending: 'Creating semantic index...', success: 'Semantic index created!', failure: 'Failed to create semantic index' }
+    )
+    if (receipt) {
       setIndexForm({
         keyword: '',
         citations: [''],
         relevanceScores: [90],
       })
-    } catch (err) {
-      console.error('Failed to create index:', err)
-      toast.error('Failed to create semantic index. Please try again.')
-    } finally {
-      setSubmitting(false)
     }
   }
 
@@ -149,14 +171,19 @@ function Lexicon() {
 
     setSubmitting(true)
     try {
-      const result = await contracts.LexiconHolder.resolveAmbiguity(account, searchQuery)
+      const result = await contracts.LexiconHolder.resolveAmbiguityTopK(
+        creator,
+        searchQuery,
+        corpus.corpusHash,
+        5
+      )
       setSearchResults({
-        citations: result.citations || result[0],
-        scores: result.scores || result[1],
+        citations: [...result.citations],
+        scores: result.confidences.map(Number),
       })
     } catch (err) {
       console.error('Search failed:', err)
-      toast.error('Search failed. Please try again.')
+      toast.error(`Search failed: ${getErrorMessage(err)}`)
       setSearchResults(null)
     } finally {
       setSubmitting(false)
@@ -203,7 +230,7 @@ function Lexicon() {
     )
   }
 
-  if (loading) {
+  if (loading && !corpus && !intent) {
     return (
       <div className="flex items-center justify-center py-20">
         <RefreshCw size={32} className="animate-spin text-primary-600" />
@@ -231,6 +258,8 @@ function Lexicon() {
           Refresh
         </button>
       </div>
+
+      <CreatorSelector account={account} creator={creator} onChange={setCreatorOverride} />
 
       {/* Corpus Status */}
       {corpus && (
@@ -272,12 +301,12 @@ function Lexicon() {
                   Storage URI
                 </div>
                 <a
-                  href={corpus.storageUri}
+                  href={corpus.storageURI}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary-600 hover:underline break-all"
                 >
-                  {corpus.storageUri}
+                  {corpus.storageURI}
                 </a>
               </div>
               <div>
@@ -289,14 +318,6 @@ function Lexicon() {
                   {corpus.startYear?.toString()} - {corpus.endYear?.toString()}
                 </p>
               </div>
-              {corpus.frozenAt > 0 && (
-                <div>
-                  <div className="text-sm text-gray-500 mb-1">Frozen At</div>
-                  <p className="text-gray-900">
-                    {format(new Date(Number(corpus.frozenAt) * 1000), 'PPpp')}
-                  </p>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -311,11 +332,50 @@ function Lexicon() {
               Freeze Corpus
             </h3>
           </div>
-          <form onSubmit={handleFreezeCorpus} className="card-body space-y-4">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
-              <strong>Warning:</strong> Once frozen, the corpus cannot be modified. All intent
-              interpretation will use this frozen corpus exclusively.
+          {intent && (
+            <div className="card-body space-y-4 border-b border-gray-100">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+                <strong>Warning:</strong> Once frozen, the corpus cannot be modified. All intent
+                interpretation will use this frozen corpus exclusively. Requires INDEXER_ROLE.
+              </div>
+              <p className="text-sm text-gray-600">
+                This creator committed to a corpus when capturing their intent:
+              </p>
+              <dl className="text-sm grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-3">
+                  <dt className="text-gray-500">Corpus hash</dt>
+                  <dd className="font-mono break-all">{intent.corpusHash}</dd>
+                </div>
+                <div className="md:col-span-2">
+                  <dt className="text-gray-500">Storage URI</dt>
+                  <dd className="font-mono break-all">{intent.corpusURI}</dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500">Window</dt>
+                  <dd>{intent.corpusStartYear.toString()} - {intent.corpusEndYear.toString()}</dd>
+                </div>
+              </dl>
+              <button
+                type="button"
+                onClick={handleFreezeFromIntent}
+                disabled={submitting}
+                className="btn-primary flex items-center gap-2"
+              >
+                {submitting ? <RefreshCw size={18} className="animate-spin" /> : <Lock size={18} />}
+                Freeze This Corpus
+              </button>
             </div>
+          )}
+          {intent && (
+            <p className="px-6 pt-4 text-sm text-gray-500">Or freeze a different corpus:</p>
+          )}
+          <form onSubmit={handleFreezeCorpus} className="card-body space-y-4">
+            {!intent && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+                <strong>Warning:</strong> Once frozen, the corpus cannot be modified. All intent
+                interpretation will use this frozen corpus exclusively. Requires INDEXER_ROLE.
+              </div>
+            )}
 
             <div>
               <label className="label">Corpus Content</label>
@@ -351,7 +411,6 @@ function Lexicon() {
                   value={freezeForm.startYear}
                   onChange={(e) => setFreezeForm(prev => ({ ...prev, startYear: parseInt(e.target.value) }))}
                   min="1900"
-                  max={new Date().getFullYear()}
                   className="input"
                 />
               </div>
@@ -476,7 +535,8 @@ function Lexicon() {
           </div>
           <div className="card-body space-y-4">
             <p className="text-sm text-gray-600">
-              Query the semantic indices to see how ambiguity would be resolved.
+              Query the semantic indices to see how ambiguity would be resolved. Execution
+              only acts on a confidence of 95 or more.
             </p>
 
             <div className="flex gap-2">

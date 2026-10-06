@@ -18,11 +18,14 @@ import { ethers } from "ethers";
 // ---------------------------------------------------------------------------
 
 /**
- * Minimal ABI for LexiconHolder contract interaction.
+ * Minimal ABI for LexiconHolder contract interaction. Signatures must match
+ * contracts/LexiconHolder.sol exactly: an event whose signature differs has a
+ * different topic hash and is silently never received.
  *
  * Includes:
  *   - submitResolution:      submit a single query resolution
  *   - submitResolutionBatch: submit resolutions for multiple queries at once
+ *   - getCorpus:             storage URI and window of a frozen corpus
  *   - CorpusFrozen event:    emitted when a corpus is finalized on-chain
  */
 export const LEXICON_HOLDER_ABI = [
@@ -30,8 +33,11 @@ export const LEXICON_HOLDER_ABI = [
   "function submitResolution(address creator, string query, string[] citations, uint256[] confidences) external",
   "function submitResolutionBatch(address creator, string[] queries, string[][] citationsArray, uint256[][] confidencesArray) external",
 
+  // -- Read functions --
+  "function getCorpus(address creator) view returns ((bytes32 corpusHash, string storageURI, uint256 startYear, uint256 endYear, bool isFrozen))",
+
   // -- Events --
-  "event CorpusFrozen(address indexed creator, bytes32 corpusHash, string storageURI, uint256 startYear, uint256 endYear)",
+  "event CorpusFrozen(address indexed creator, bytes32 corpusHash, uint256 timestamp)",
 ];
 
 // ---------------------------------------------------------------------------

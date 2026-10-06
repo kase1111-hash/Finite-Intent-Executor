@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 import DocumentUploadArea from '../components/DocumentUploadArea'
+import { getErrorMessage } from '../utils/errors'
 
 // [Audit fix: I-7] Input length limits matching contract-side constants
 const INPUT_LIMITS = {
@@ -66,7 +67,7 @@ function IntentCapture() {
     setLoading(true)
     try {
       const intent = await contracts.IntentCaptureModule.getIntent(account)
-      const hasIntent = intent.intentHash !== '0x0000000000000000000000000000000000000000000000000000000000000000'
+      const hasIntent = intent.intentHash !== ethers.ZeroHash
 
       if (hasIntent) {
         setExistingIntent(intent)
@@ -74,6 +75,9 @@ function IntentCapture() {
         // Fetch goals
         const fetchedGoals = await contracts.IntentCaptureModule.getGoals(account)
         setGoals(fetchedGoals || [])
+      } else {
+        setExistingIntent(null)
+        setGoals([])
       }
     } catch (err) {
       console.error('Failed to fetch intent:', err)
@@ -202,7 +206,7 @@ function IntentCapture() {
       fetchExistingIntent()
     } catch (err) {
       console.error('Failed to capture intent:', err)
-      toast.error('Failed to capture intent. Please try again.')
+      toast.error(`Failed to capture intent: ${getErrorMessage(err)}`, { id: 'capture' })
     } finally {
       setSubmitting(false)
     }
@@ -235,7 +239,7 @@ function IntentCapture() {
       fetchExistingIntent()
     } catch (err) {
       console.error('Failed to add goal:', err)
-      toast.error('Failed to add goal. Please try again.')
+      toast.error(`Failed to add goal: ${getErrorMessage(err)}`, { id: 'goal' })
     } finally {
       setSubmitting(false)
     }
@@ -252,11 +256,10 @@ function IntentCapture() {
       toast.loading('Revoking intent...', { id: 'revoke' })
       await tx.wait()
       toast.success('Intent revoked successfully!', { id: 'revoke' })
-      setExistingIntent(null)
-      setGoals([])
+      fetchExistingIntent()
     } catch (err) {
       console.error('Failed to revoke intent:', err)
-      toast.error('Failed to revoke intent. Please try again.')
+      toast.error(`Failed to revoke intent: ${getErrorMessage(err)}`, { id: 'revoke' })
     } finally {
       setSubmitting(false)
     }
@@ -280,23 +283,45 @@ function IntentCapture() {
     )
   }
 
+  // A revoked intent is final: capture is single-shot per address [L-15]
+  if (existingIntent?.isRevoked) {
+    return (
+      <div className="text-center py-20 card">
+        <XCircle size={48} className="mx-auto text-gray-400 mb-4" />
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Intent Revoked</h2>
+        <p className="text-gray-600 max-w-md mx-auto">
+          The intent for this address was revoked and will never execute. Each address
+          can capture an intent only once, so to record a new intent use a different address.
+        </p>
+      </div>
+    )
+  }
+
+  const isTriggered = existingIntent?.isTriggered
+
   // Show existing intent view
-  if (existingIntent && !existingIntent.isRevoked) {
+  if (existingIntent) {
     return (
       <div className="space-y-8">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Intent Captured</h1>
-            <p className="text-gray-600 mt-1">Your intent has been secured on-chain</p>
+            <p className="text-gray-600 mt-1">
+              {isTriggered
+                ? 'Your intent has been triggered and can no longer be changed or revoked'
+                : 'Your intent has been secured on-chain'}
+            </p>
           </div>
-          <button
-            onClick={handleRevoke}
-            disabled={submitting}
-            className="btn-danger flex items-center gap-2"
-          >
-            <XCircle size={18} />
-            Revoke Intent
-          </button>
+          {!isTriggered && (
+            <button
+              onClick={handleRevoke}
+              disabled={submitting}
+              className="btn-danger flex items-center gap-2"
+            >
+              <XCircle size={18} />
+              Revoke Intent
+            </button>
+          )}
         </div>
 
         {/* Intent Details Card */}
@@ -331,9 +356,9 @@ function IntentCapture() {
                   Corpus URI
                 </dt>
                 <dd className="text-sm">
-                  <a href={existingIntent.corpusUri} target="_blank" rel="noopener noreferrer"
+                  <a href={existingIntent.corpusURI} target="_blank" rel="noopener noreferrer"
                      className="text-primary-600 hover:underline break-all">
-                    {existingIntent.corpusUri}
+                    {existingIntent.corpusURI}
                   </a>
                 </dd>
               </div>
@@ -347,13 +372,17 @@ function IntentCapture() {
                 </dd>
               </div>
               <div>
-                <dt className="text-sm text-gray-500 mb-1">Version</dt>
-                <dd className="text-gray-900">{existingIntent.version?.toString()}</dd>
+                <dt className="text-sm text-gray-500 mb-1">Assets</dt>
+                <dd className="text-gray-900 font-mono text-sm break-all">
+                  {existingIntent.assetAddresses.map(addr => (
+                    <div key={addr}>{addr}</div>
+                  ))}
+                </dd>
               </div>
               <div>
-                <dt className="text-sm text-gray-500 mb-1">Created</dt>
+                <dt className="text-sm text-gray-500 mb-1">Captured</dt>
                 <dd className="text-gray-900">
-                  {format(new Date(Number(existingIntent.createdAt) * 1000), 'PPpp')}
+                  {format(new Date(Number(existingIntent.captureTimestamp) * 1000), 'PPpp')}
                 </dd>
               </div>
             </dl>
@@ -375,9 +404,6 @@ function IntentCapture() {
                     </div>
                     <div className="flex-1">
                       <p className="text-gray-900">{goal.description}</p>
-                      {!goal.isActive && (
-                        <span className="badge-neutral mt-2">Inactive</span>
-                      )}
                     </div>
                   </li>
                 ))}
@@ -387,56 +413,58 @@ function IntentCapture() {
             )}
 
             {/* Add Goal Form */}
-            <form onSubmit={handleAddGoal} className="mt-6 pt-6 border-t border-gray-200">
-              <h3 className="font-medium text-gray-900 mb-4">Add New Goal</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="label">Description</label>
-                  <input
-                    type="text"
-                    value={newGoal.description}
-                    onChange={(e) => setNewGoal(prev => ({ ...prev, description: sanitizeInput(e.target.value) }))}
-                    placeholder="e.g., Fund open-source AI safety research"
-                    className="input"
-                    maxLength={INPUT_LIMITS.goalDescription}
-                  />
-                </div>
-                <div>
-                  <label className="label">Constraints (optional)</label>
-                  <textarea
-                    value={newGoal.constraints}
-                    onChange={(e) => setNewGoal(prev => ({ ...prev, constraints: sanitizeInput(e.target.value) }))}
-                    placeholder="e.g., No commercial use without attribution"
-                    className="input min-h-[80px]"
-                    maxLength={INPUT_LIMITS.goalConstraints}
-                  />
-                </div>
-                <div>
-                  <label className="label">Priority (1-100)</label>
-                  <input
-                    type="range"
-                    min="1"
-                    max="100"
-                    value={newGoal.priority}
-                    onChange={(e) => setNewGoal(prev => ({ ...prev, priority: parseInt(e.target.value) }))}
-                    className="w-full"
-                  />
-                  <div className="flex justify-between text-sm text-gray-500">
-                    <span>Low</span>
-                    <span className="font-medium text-gray-900">{newGoal.priority}</span>
-                    <span>High</span>
+            {!isTriggered && (
+              <form onSubmit={handleAddGoal} className="mt-6 pt-6 border-t border-gray-200">
+                <h3 className="font-medium text-gray-900 mb-4">Add New Goal</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="label">Description</label>
+                    <input
+                      type="text"
+                      value={newGoal.description}
+                      onChange={(e) => setNewGoal(prev => ({ ...prev, description: sanitizeInput(e.target.value) }))}
+                      placeholder="e.g., Fund open-source AI safety research"
+                      className="input"
+                      maxLength={INPUT_LIMITS.goalDescription}
+                    />
                   </div>
+                  <div>
+                    <label className="label">Constraints (optional)</label>
+                    <textarea
+                      value={newGoal.constraints}
+                      onChange={(e) => setNewGoal(prev => ({ ...prev, constraints: sanitizeInput(e.target.value) }))}
+                      placeholder="e.g., No commercial use without attribution"
+                      className="input min-h-[80px]"
+                      maxLength={INPUT_LIMITS.goalConstraints}
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Priority (1-100)</label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="100"
+                      value={newGoal.priority}
+                      onChange={(e) => setNewGoal(prev => ({ ...prev, priority: parseInt(e.target.value) }))}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between text-sm text-gray-500">
+                      <span>Low</span>
+                      <span className="font-medium text-gray-900">{newGoal.priority}</span>
+                      <span>High</span>
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="btn-primary flex items-center gap-2"
+                  >
+                    <Plus size={18} />
+                    Add Goal
+                  </button>
                 </div>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="btn-primary flex items-center gap-2"
-                >
-                  <Plus size={18} />
-                  Add Goal
-                </button>
-              </div>
-            </form>
+              </form>
+            )}
           </div>
         </div>
       </div>
@@ -623,6 +651,24 @@ function IntentCapture() {
             ))}
             <p className="text-xs text-gray-500">
               Add addresses of tokenized assets (IPToken contracts, etc.)
+              {contracts.IPToken && !form.assetAddresses.includes(contracts.IPToken.target) && (
+                <>
+                  {' '}
+                  <button
+                    type="button"
+                    className="text-primary-600 hover:underline"
+                    onClick={() => setForm(prev => ({
+                      ...prev,
+                      assetAddresses: [
+                        ...prev.assetAddresses.filter(a => a.trim()),
+                        contracts.IPToken.target,
+                      ],
+                    }))}
+                  >
+                    Add this deployment&apos;s IPToken contract
+                  </button>
+                </>
+              )}
             </p>
           </div>
         </div>
